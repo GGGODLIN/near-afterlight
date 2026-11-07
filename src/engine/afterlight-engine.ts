@@ -30,15 +30,6 @@ export type StationRejectionCode =
   | "InsufficientRepairReserve"
   | "OrbitScheduleCompleted";
 
-export interface EquipmentHandoverRecord {
-  turn: number;
-  fromOwnerId: string;
-  toOwnerId: string;
-  preservedWearBps: number;
-  preservedReserveCredits: number;
-  preservedChargeKwh: number;
-}
-
 export interface EquipmentNftState {
   tokenId: string;
   name: string;
@@ -50,7 +41,7 @@ export interface EquipmentNftState {
   wearBps: number;
   reserveCredits: number;
   cumulativeEarnedCredits: number;
-  handoverHistory: EquipmentHandoverRecord[];
+  transferCount: number;
 }
 
 export interface TurnAccountingReceipt {
@@ -188,7 +179,7 @@ export function createInitialStationState(config?: InitialStationConfig): Statio
         wearBps: 0,
         reserveCredits: 200,
         cumulativeEarnedCredits: 0,
-        handoverHistory: [],
+        transferCount: 0,
       },
       "bat-alpha-1": {
         tokenId: "bat-alpha-1",
@@ -201,7 +192,7 @@ export function createInitialStationState(config?: InitialStationConfig): Statio
         wearBps: 0,
         reserveCredits: 200,
         cumulativeEarnedCredits: 0,
-        handoverHistory: [],
+        transferCount: 0,
       },
       "bat-beta-2": {
         tokenId: "bat-beta-2",
@@ -214,7 +205,7 @@ export function createInitialStationState(config?: InitialStationConfig): Statio
         wearBps: 0,
         reserveCredits: 200,
         cumulativeEarnedCredits: 0,
-        handoverHistory: [],
+        transferCount: 0,
       },
       "o2-scrubber-1": {
         tokenId: "o2-scrubber-1",
@@ -227,7 +218,7 @@ export function createInitialStationState(config?: InitialStationConfig): Statio
         wearBps: 0,
         reserveCredits: 200,
         cumulativeEarnedCredits: 0,
-        handoverHistory: [],
+        transferCount: 0,
       },
     },
     turnHistory: [],
@@ -327,16 +318,8 @@ export function applyStationAction(
     }
     const next = structuredClone(state) as StationState;
     const targetEq = next.equipment[action.tokenId];
-    const prevOwner = targetEq.ownerId;
     targetEq.ownerId = action.toOwnerId;
-    targetEq.handoverHistory.push({
-      turn: next.turn,
-      fromOwnerId: prevOwner,
-      toOwnerId: action.toOwnerId,
-      preservedWearBps: targetEq.wearBps,
-      preservedReserveCredits: targetEq.reserveCredits,
-      preservedChargeKwh: targetEq.chargeKwh,
-    });
+    targetEq.transferCount += 1;
     if (next.accountCredits[action.toOwnerId] === undefined) {
       next.accountCredits[action.toOwnerId] = 0;
     }

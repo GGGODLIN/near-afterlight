@@ -4,7 +4,7 @@ import type {
   StationState,
 } from "./afterlight-engine.ts";
 
-export interface LedgerFieldDiff {
+interface LedgerFieldDiff {
   fieldPath: string;
   engineValue: number | string;
   oracleValue: number | string;

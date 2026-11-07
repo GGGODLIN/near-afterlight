@@ -4,10 +4,10 @@ import path from "node:path";
 import test from "node:test";
 import fc from "fast-check";
 import {
-  AFTERLIGHT_TRACKS,
   COORDINATOR_CONTRACT_ID,
   DEFAULT_CORRIDOR_CAP_KWH,
   INITIAL_TOTAL_STATION_CREDITS,
+  STATION_ZONES,
 } from "../src/engine/constants.ts";
 import {
   applyStationAction,
@@ -29,7 +29,7 @@ const RELAYER_ID = "relayer.afterlight.testnet";
 test("Role 1 (Ticket 01.2 & 01.3): Daylight generation, Corridor bottleneck eclipse blackout, and TerminalBlackoutImmutable finality", () => {
   let state = createInitialStationState();
   assert.equal(sumAllStationCredits(state), INITIAL_TOTAL_STATION_CREDITS);
-  assert.deepEqual(AFTERLIGHT_TRACKS, ["games", "nfts"]);
+  assert.equal(STATION_ZONES.length, 3);
   assert.equal(Object.keys(state.equipment).length, 4);
 
   // Route both batteries to SOLAR_ARRAY so Habitat Dome has 0 local battery backup during Eclipse
@@ -175,7 +175,7 @@ test("Role 1 (Ticket 01.4 & P3): NEP-171 dynamic equipment transfer preserves we
   assert.equal(afterNft.reserveCredits, beforeNft.reserveCredits);
   assert.equal(afterNft.chargeKwh, beforeNft.chargeKwh);
   assert.equal(afterNft.zone, beforeNft.zone);
-  assert.equal(afterNft.handoverHistory.length, 1);
+  assert.equal(afterNft.transferCount, 1);
 
   // Anti-Sybil Invariance: 1 account holding all 4 NFTs vs 2 accounts splitting the 4 NFTs produce identical station energy, wear, and total operator credits
   let singleOwnerState = createInitialStationState({ singleOwnerAllEquipment: true });
