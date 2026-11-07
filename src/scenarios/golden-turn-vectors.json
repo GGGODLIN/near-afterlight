@@ -1,0 +1,53 @@
+[
+  {
+    "id": "golden-01-greedy-surge-collapse",
+    "corridorCapKwh": 45,
+    "gridPriceTier": "SURGE",
+    "maintenanceReserveBps": 0,
+    "batAlphaZone": "HABITAT_DOME",
+    "batBetaZone": "SOLAR_ARRAY",
+    "turnsToRun": 14,
+    "expectedFinalTurn": 4,
+    "expectedStatus": "BLACKOUT",
+    "expectedCollapseRootCause": "SCRUBBER_SOLVENCY_COLLAPSE",
+    "expectedTotalCredits": 10000,
+    "expectedO2Level": 0,
+    "expectedGenSolarWearBps": 2400,
+    "expectedColonistCredits": 3880,
+    "expectedTreasuryCredits": 1800
+  },
+  {
+    "id": "golden-02-corridor-bottleneck-blackout",
+    "corridorCapKwh": 45,
+    "gridPriceTier": "BALANCED",
+    "maintenanceReserveBps": 2000,
+    "batAlphaZone": "SOLAR_ARRAY",
+    "batBetaZone": "SOLAR_ARRAY",
+    "turnsToRun": 14,
+    "expectedFinalTurn": 2,
+    "expectedStatus": "BLACKOUT",
+    "expectedCollapseRootCause": "CORRIDOR_BOTTLENECK_BLACKOUT",
+    "expectedTotalCredits": 10000,
+    "expectedO2Level": 0,
+    "expectedGenSolarWearBps": 200,
+    "expectedColonistCredits": 4680,
+    "expectedTreasuryCredits": 1880
+  },
+  {
+    "id": "golden-03-balanced-survival-14-turns",
+    "corridorCapKwh": 45,
+    "gridPriceTier": "BALANCED",
+    "maintenanceReserveBps": 2000,
+    "batAlphaZone": "HABITAT_DOME",
+    "batBetaZone": "SOLAR_ARRAY",
+    "turnsToRun": 14,
+    "expectedFinalTurn": 14,
+    "expectedStatus": "SURVIVED",
+    "expectedCollapseRootCause": null,
+    "expectedTotalCredits": 10000,
+    "expectedO2Level": 100,
+    "expectedGenSolarWearBps": 1400,
+    "expectedColonistCredits": 2620,
+    "expectedTreasuryCredits": 2360
+  }
+]
