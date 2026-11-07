@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — Orbital Station Power-Grid & NEP-171 Dynamic Equipment Engine, NEAR Rust Contract, Two-Layer NEP-366 Guard, and Shape 1 Conditional PBT
 
-**Status:** `ready-for-agent`
+**Status:** `done`
 
 **Needs:** None — a worker can check every item unaided.
 
@@ -28,4 +28,6 @@
 ## Verification Log
 
 - 2026-11-08 Ticket 02 verified: observed RED (3/3 failing on missing implementation), implemented `station-trajectories.ts`, `export-film-snapshot.ts`, `judge-audit-runner.ts`, and `judge-cli.ts`; `npm test` 10/10 PASS and `npm run verify:judge` PASS in `154ms`.
+- 2026-11-08 Ticket 02 YAGNI review (`verdict.json`): applied cuts in commit `e0e884d` (removed premature `buildAutopsyBanner` and `TrajectoryAutopsyBanner`, unexported `AfterlightFilmSnapshot`, `TrajectoryPresetDescriptor`, `FirstDivergenceDiagnostic`, and `JudgeAuditOptions`).
+
 
