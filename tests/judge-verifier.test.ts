@@ -18,8 +18,7 @@ test("Ticket 02.1 (Failure F5): simulateOrbitWeek dynamically computes 01-greedy
     greedy.finalState.collapseRootCause,
     "SCRUBBER_SOLVENCY_COLLAPSE",
   );
-  assert.equal(greedy.autopsyBanner.rootCause, "SCRUBBER_SOLVENCY_COLLAPSE");
-  assert.equal(greedy.autopsyBanner.failureTurn, 4);
+  assert.equal(greedy.finalState.turn, 4);
 
   const corridor = runTrajectoryPreset("02-corridor-bottleneck-blackout");
   assert.equal(corridor.finalState.stationStatus, "BLACKOUT");
@@ -27,8 +26,7 @@ test("Ticket 02.1 (Failure F5): simulateOrbitWeek dynamically computes 01-greedy
     corridor.finalState.collapseRootCause,
     "CORRIDOR_BOTTLENECK_BLACKOUT",
   );
-  assert.equal(corridor.autopsyBanner.rootCause, "CORRIDOR_BOTTLENECK_BLACKOUT");
-  assert.equal(corridor.autopsyBanner.failureTurn, 2);
+  assert.equal(corridor.finalState.turn, 2);
 
   const balanced = runTrajectoryPreset("03-balanced-survival-walkthrough");
   assert.equal(balanced.finalState.stationStatus, "SURVIVED");

@@ -4,7 +4,7 @@ import {
   type TrajectorySimulationResult,
 } from "./station-trajectories.ts";
 
-export interface AfterlightFilmSnapshot {
+interface AfterlightFilmSnapshot {
   project: string;
   tracks: readonly ["games", "nfts"];
   presets: Record<string, TrajectorySimulationResult>;

@@ -25,7 +25,7 @@ import {
   runTrajectoryPreset,
 } from "../scenarios/station-trajectories.ts";
 
-export interface FirstDivergenceDiagnostic {
+interface FirstDivergenceDiagnostic {
   seed: number;
   counterexamplePath: string;
   numShrinks: number;
@@ -80,7 +80,7 @@ export interface JudgeVerificationReport {
   };
 }
 
-export interface JudgeAuditOptions {
+interface JudgeAuditOptions {
   contractPathOverride?: string;
   customActionRunner?: (
     state: Readonly<StationState>,
