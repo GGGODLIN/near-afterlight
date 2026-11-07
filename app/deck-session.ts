@@ -85,7 +85,7 @@ export interface LiveSession {
   blockHeight: number;
 }
 
-export interface ReplayRun {
+interface ReplayRun {
   presetId: TrajectoryPresetId;
   title: string;
   initialState: StationState;
@@ -140,7 +140,7 @@ export interface DeckState {
   cardSlips: Record<string, CardSlip>;
 }
 
-export interface DeckFrame {
+interface DeckFrame {
   state: StationState;
   receipt: TurnAccountingReceipt | null;
 }

@@ -1,4 +1,9 @@
-import { createInitialStationState } from "../../../src/engine/afterlight-engine.ts";
+import {
+  createInitialStationState,
+  EQUIPMENT_ORDER,
+  isValidAccountId,
+} from "../../../src/engine/afterlight-engine.ts";
+import { GRID_PRICE_TIERS } from "../../../src/engine/constants.ts";
 import { buildCollapseAutopsy } from "../../../src/scenarios/collapse-autopsy.ts";
 import {
   listTrajectoryPresets,
@@ -73,22 +78,8 @@ export async function POST(request: Request): Promise<Response> {
     body.schedule.length > 0 &&
     body.schedule.length <= 14
   ) {
-    const validTiers = new Set(["SUBSIDIZED", "BALANCED", "SURGE"]);
     const validZones = new Set(["SOLAR_ARRAY", "HABITAT_DOME"]);
-    const validTokenIds = new Set([
-      "gen-solar-1",
-      "bat-alpha-1",
-      "bat-beta-2",
-      "o2-scrubber-1",
-    ]);
-    const validAccountPattern = /^[a-z0-9._-]+$/i;
-    const forbiddenAccountIds = new Set([
-      "__proto__",
-      "constructor",
-      "prototype",
-      "toString",
-      "valueOf",
-    ]);
+    const validTokenIds = new Set<string>(EQUIPMENT_ORDER);
     const schedule: TurnPolicyStep[] = [];
 
     for (const rawStep of body.schedule) {
@@ -104,7 +95,7 @@ export async function POST(request: Request): Promise<Response> {
       const s = rawStep as Record<string, unknown>;
       if (
         typeof s.gridPriceTier !== "string" ||
-        !validTiers.has(s.gridPriceTier) ||
+        !Object.hasOwn(GRID_PRICE_TIERS, s.gridPriceTier) ||
         typeof s.maintenanceReserveBps !== "number" ||
         !Number.isSafeInteger(s.maintenanceReserveBps) ||
         s.maintenanceReserveBps < 0 ||
@@ -138,10 +129,7 @@ export async function POST(request: Request): Promise<Response> {
         if (
           typeof s.transferTokenId !== "string" ||
           !validTokenIds.has(s.transferTokenId) ||
-          typeof s.transferToOwnerId !== "string" ||
-          s.transferToOwnerId.length === 0 ||
-          !validAccountPattern.test(s.transferToOwnerId) ||
-          forbiddenAccountIds.has(s.transferToOwnerId)
+          !isValidAccountId(s.transferToOwnerId)
         ) {
           return Response.json(
             {

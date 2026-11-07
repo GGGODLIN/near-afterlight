@@ -32,19 +32,11 @@ export interface Nep366DelegateEnvelope {
   signatureHex: string;
 }
 
-export interface Nep366RelayTrace {
+interface Nep366RelayTrace {
   envelopeVerdict: Nep366EnvelopeRejection;
   envelopeAccepted: boolean;
-  senderId: string;
-  relayerSignerId: string;
-  receiverId: string;
-  nonce: number;
-  lastNonce: number;
-  maxBlockHeight: number;
-  currentBlockHeight: number;
   executionVerdict: {
     effectivePredecessorId: string;
-    relayerSignerId: string;
     engineAccepted: boolean;
     engineRejectionCode: string | null;
   };
@@ -80,16 +72,8 @@ export function verifyAndExecuteNep366Delegate(
   const rejectEnvelope = (verdict: Nep366EnvelopeRejection): Nep366RelayTrace => ({
     envelopeVerdict: verdict,
     envelopeAccepted: false,
-    senderId: envelope.senderId,
-    relayerSignerId: envelope.relayerSignerId,
-    receiverId: envelope.receiverId,
-    nonce: envelope.nonce,
-    lastNonce: envelope.lastNonce,
-    maxBlockHeight: envelope.maxBlockHeight,
-    currentBlockHeight: envelope.currentBlockHeight,
     executionVerdict: {
       effectivePredecessorId: envelope.senderId,
-      relayerSignerId: envelope.relayerSignerId,
       engineAccepted: false,
       engineRejectionCode: null,
     },
@@ -165,16 +149,8 @@ export function verifyAndExecuteNep366Delegate(
   return {
     envelopeVerdict: "Valid",
     envelopeAccepted: true,
-    senderId: envelope.senderId,
-    relayerSignerId: envelope.relayerSignerId,
-    receiverId: envelope.receiverId,
-    nonce: envelope.nonce,
-    lastNonce: envelope.lastNonce,
-    maxBlockHeight: envelope.maxBlockHeight,
-    currentBlockHeight: envelope.currentBlockHeight,
     executionVerdict: {
       effectivePredecessorId: envelope.senderId,
-      relayerSignerId: envelope.relayerSignerId,
       engineAccepted: outcome.accepted,
       engineRejectionCode: outcome.rejectionCode,
     },

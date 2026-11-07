@@ -3,7 +3,7 @@ import type {
   StationState,
 } from "../engine/afterlight-engine.ts";
 
-export interface CollapseAutopsy {
+interface CollapseAutopsy {
   headline: string;
   failureTurn: number | null;
   rootCause: CollapseRootCause | null;

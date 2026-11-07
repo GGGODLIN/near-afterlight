@@ -70,7 +70,7 @@ function useTacticalAudio(muted: boolean): PlayCue {
   );
 }
 
-export interface CommandDeckActions {
+interface CommandDeckActions {
   tier: (tier: GridPriceTierKey) => void;
   reserve: (bps: number) => void;
   route: (tokenId: string) => void;
@@ -86,7 +86,7 @@ export interface CommandDeckActions {
   runJudge: () => void;
 }
 
-export interface CommandDeckModel {
+interface CommandDeckModel {
   deck: DeckState;
   state: StationState;
   receipt: TurnAccountingReceipt | null;

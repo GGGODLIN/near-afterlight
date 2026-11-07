@@ -4,7 +4,6 @@ import {
   createInitialStationState,
   DEFAULT_OPERATOR_A,
   DEFAULT_OPERATOR_B,
-  type CollapseRootCause,
   type StationState,
   type TurnAccountingReceipt,
 } from "../engine/afterlight-engine.ts";
@@ -37,8 +36,6 @@ interface TrajectoryPresetDescriptor {
   id: TrajectoryPresetId;
   title: string;
   subtitle: string;
-  expectedOutcome: "BLACKOUT" | "SURVIVED";
-  expectedRootCause: CollapseRootCause | null;
   schedule: TurnPolicyStep[];
 }
 
@@ -52,8 +49,6 @@ const PRESET_DESCRIPTORS: TrajectoryPresetDescriptor[] = [
     title: "01. Greedy Price Spike (O2 Scrubber Bankrupts on Turn 4)",
     subtitle:
       "SURGE pricing (8 CR/kWh) + 0 bps maintenance reserve drains Aegis-IV O2 Scrubber reserve by Turn 4.",
-    expectedOutcome: "BLACKOUT",
-    expectedRootCause: "SCRUBBER_SOLVENCY_COLLAPSE",
     schedule: buildUniformSchedule({
       gridPriceTier: "SURGE",
       maintenanceReserveBps: 0,
@@ -66,8 +61,6 @@ const PRESET_DESCRIPTORS: TrajectoryPresetDescriptor[] = [
     title: "02. Corridor Bottleneck (Solar Full, Habitat Blackout on Eclipse Turn 2)",
     subtitle:
       "Both CryoCell batteries remain parked in Solar Array; 45 kWh corridor cap blocks the 50 kWh Eclipse load.",
-    expectedOutcome: "BLACKOUT",
-    expectedRootCause: "CORRIDOR_BOTTLENECK_BLACKOUT",
     schedule: buildUniformSchedule({
       gridPriceTier: "BALANCED",
       maintenanceReserveBps: 2000,
@@ -80,8 +73,6 @@ const PRESET_DESCRIPTORS: TrajectoryPresetDescriptor[] = [
     title: "03. Balanced Routing & Maintenance (7-Day Survival + Mid-Orbit NFT Handover)",
     subtitle:
       "BALANCED pricing (4 CR/kWh) + 2000 bps auto-repair + split battery staging survives all 14 turns.",
-    expectedOutcome: "SURVIVED",
-    expectedRootCause: null,
     schedule: buildUniformSchedule({
       gridPriceTier: "BALANCED",
       maintenanceReserveBps: 2000,

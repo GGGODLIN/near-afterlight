@@ -14,15 +14,15 @@ import {
   type GridPriceTierKey,
 } from "./constants.ts";
 
-export type EquipmentKind = "SOLAR_GENERATOR" | "STORAGE_BATTERY" | "O2_SCRUBBER";
+type EquipmentKind = "SOLAR_GENERATOR" | "STORAGE_BATTERY" | "O2_SCRUBBER";
 export type OrbitalPhase = "DAYLIGHT" | "ECLIPSE";
-export type StationStatus = "ACTIVE" | "BLACKOUT" | "SURVIVED";
+type StationStatus = "ACTIVE" | "BLACKOUT" | "SURVIVED";
 export type CollapseRootCause =
   | "CORRIDOR_BOTTLENECK_BLACKOUT"
   | "SCRUBBER_SOLVENCY_COLLAPSE"
   | "UNMAINTAINED_CAPACITY_DECAY";
 
-export type StationRejectionCode =
+type StationRejectionCode =
   | "TerminalBlackoutImmutable"
   | "InvalidStationParameters"
   | "UnauthorizedNftTransfer"
@@ -124,7 +124,7 @@ export interface StationActionOutcome {
   receipt: TurnAccountingReceipt | null;
 }
 
-export interface InitialStationConfig {
+interface InitialStationConfig {
   corridorCapKwh?: number;
   singleOwnerAllEquipment?: boolean;
 }
@@ -132,7 +132,7 @@ export interface InitialStationConfig {
 export const DEFAULT_OPERATOR_A = "commander-a.afterlight.testnet";
 export const DEFAULT_OPERATOR_B = "operator-b.afterlight.testnet";
 
-const EQUIPMENT_ORDER = [
+export const EQUIPMENT_ORDER = [
   "gen-solar-1",
   "bat-alpha-1",
   "bat-beta-2",
@@ -260,7 +260,7 @@ const FORBIDDEN_PROTOTYPE_KEYS = new Set([
   "valueOf",
 ]);
 
-function isValidAccountId(accountId: unknown): accountId is string {
+export function isValidAccountId(accountId: unknown): accountId is string {
   return (
     typeof accountId === "string" &&
     accountId.length > 0 &&

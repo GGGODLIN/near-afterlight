@@ -8,7 +8,7 @@ import {
 
 export type SkyMode = "daylight" | "eclipse" | "dawn";
 
-export interface StationStageProps {
+interface StationStageProps {
   state: StationState;
   receipt: TurnAccountingReceipt | null;
   sky: SkyMode;
