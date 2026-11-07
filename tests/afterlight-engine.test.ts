@@ -111,6 +111,41 @@ test("Role 1 (Ticket 01.2 & 01.4): Surge price triggers SCRUBBER_SOLVENCY_COLLAP
   assert.equal(badRoute.accepted, false);
   assert.equal(badRoute.rejectionCode, "NonMovableEquipment");
 
+  // Reject Object.prototype keys as unknown tokenId / invalid tier / invalid toOwnerId
+  const protoRoute = applyStationAction(state, {
+    kind: "RouteBattery",
+    actorId: OPERATOR_A,
+    tokenId: "toString",
+    targetZone: "HABITAT_DOME",
+  });
+  assert.equal(protoRoute.accepted, false);
+  assert.equal(protoRoute.rejectionCode, "InvalidStationParameters");
+
+  const protoTransfer = applyStationAction(state, {
+    kind: "TransferEquipmentNft",
+    actorId: OPERATOR_A,
+    tokenId: "gen-solar-1",
+    toOwnerId: "__proto__",
+  });
+  assert.equal(protoTransfer.accepted, false);
+  assert.equal(protoTransfer.rejectionCode, "InvalidStationParameters");
+
+  // Verify 0% Skim (maintenanceReserveBps: 0) with BALANCED tariff triggers UNMAINTAINED_CAPACITY_DECAY on Turn 4
+  let skimState = applyStationAction(state, {
+    kind: "SetPolicy",
+    actorId: OPERATOR_A,
+    gridPriceTier: "BALANCED",
+    maintenanceReserveBps: 0,
+  }).state;
+  for (let i = 0; i < 4; i++) {
+    skimState = applyStationAction(skimState, {
+      kind: "AdvanceTurn",
+      actorId: OPERATOR_A,
+    }).state;
+  }
+  assert.equal(skimState.stationStatus, "BLACKOUT");
+  assert.equal(skimState.collapseRootCause, "UNMAINTAINED_CAPACITY_DECAY");
+
   // Set SURGE price (8 CR/kWh) and 0 bps maintenance reserve
   const policyRes = applyStationAction(state, {
     kind: "SetPolicy",
@@ -329,6 +364,33 @@ test("Role 1 (Ticket 01.5): Two-layer NEP-366 SignedDelegate session guard separ
     resHijack.executionVerdict.engineRejectionCode,
     "UnauthorizedNftTransfer",
   );
+
+  // Relayer cannot swap action.kind (e.g. route_battery envelope paired with TransferEquipmentNft)
+  const resMethodSwap = verifyAndExecuteNep366Delegate(
+    {
+      senderId: OPERATOR_A,
+      relayerSignerId: RELAYER_ID,
+      receiverId: COORDINATOR_CONTRACT_ID,
+      methodName: "route_battery",
+      nonce: 301,
+      lastNonce: 300,
+      maxBlockHeight: 5000,
+      currentBlockHeight: 4950,
+      attachedDepositYocto: 0,
+      signatureHex: buildDeterministicDelegateSignature(
+        OPERATOR_A,
+        COORDINATOR_CONTRACT_ID,
+        "route_battery",
+        301,
+        5000,
+      ),
+    },
+    hijackAction,
+    state,
+  );
+  assert.equal(resMethodSwap.envelopeAccepted, false);
+  assert.equal(resMethodSwap.envelopeVerdict, "DisallowedDelegateActionKind");
+  assert.equal(state.equipment["bat-alpha-1"].ownerId, OPERATOR_A);
 });
 
 test("Role 2 (Ticket 01.6): Shape 1 200-run fc.check() property suite verifies P1..P4 after every step and meets all 5 reachability witness floors", () => {

@@ -28,7 +28,7 @@ Because Eclipse load (`50 kWh`) exceeds the Transmission Corridor capacity cap (
 ## How Afterlight Uses Native NEAR Primitives
 
 1. **Dynamic `NEP-171` Equipment NFTs (`contracts/afterlight/src/lib.rs`, `near-sdk = "=5.29.0"`)**:
-   - Each equipment unit (`gen-solar-1`, `bat-alpha-1`, `bat-beta-2`, `o2-scrubber-1`) is an `NEP-171` NFT storing live on-chain state: `ownerId`, `zone`, `chargeKwh`, `maxCapacityKwh`, `wearBps`, `reserveCredits`, `cumulativeEarnedCredits`, and `handoverHistory`.
+   - Each equipment unit (`gen-solar-1`, `bat-alpha-1`, `bat-beta-2`, `o2-scrubber-1`) is an `NEP-171` NFT storing live on-chain state: `ownerId`, `zone`, `chargeKwh`, `maxCapacityKwh`, `wearBps`, `reserveCredits`, `cumulativeEarnedCredits`, and `transferCount` (`handover_history` on-chain).
    - Transferring an NFT (`nft_transfer`) transfers future electricity revenue and locked `reserveCredits` to the new operator while strictly preserving `wearBps`, `chargeKwh`, and `zone` (`P3` Non-Laundering Invariance: selling an NFT cannot reset its wear or double-claim reserves).
 2. **Closed-Loop Station Credit Ledger (`NEP-141` Compatible Accounting)**:
    - Total station credits (`10,000 CR`) circulate in a closed loop across `operatorA`, `operatorB`, `colonistDemandPool`, `stationTreasury`, and individual NFT `reserveCredits` (`P1` Currency Conservation).
@@ -66,4 +66,4 @@ Because Eclipse load (`50 kWh`) exceeds the Transmission Corridor capacity cap (
 - **Do X**:
   Run `npm run dev` and open `http://localhost:3000`.
 - **See Y**:
-  - Adjust the 3 tactical controls (**Grid Price Tier**, **Maintenance Reserve Retention**, **Battery Zone Routing**), trigger **Fast-Forward 7 Days (14 Turns)** across the 3 trajectory presets, test 1-click **`Handover NFT to Operator B`** vs. **`Simulate Exploit: Wash Wear`**, and open the **Judge & On-Chain Inspector** drawer.
+  - Adjust the 3 tactical controls (**Grid Price Tier**, **Maintenance Reserve Retention**, **Battery Zone Routing**), trigger **Fast-Forward 7 Days (14 Turns)** across the 3 trajectory presets, test 1-click **`Handover NFT to Operator B`** vs. **`Simulate Exploit: Wash Wear / Unauthorized Siphon`**, and open the **Judge & On-Chain Inspector** drawer (`Run Judge Verification`).

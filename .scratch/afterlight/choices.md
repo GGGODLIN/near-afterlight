@@ -277,3 +277,73 @@
 - **影響範圍**：評審要捲到頁面最下方才看得到抽屜。
 - **判定**：sound — 這是 main 指定的修正方向，而且不再遮住任何操作。
 - **把握度**：高
+
+## Main Session Tickets 01..03 & Closeout Review Fixes（commits 0cf16c1..HEAD，2026-11-08）
+
+### 八類掃描
+
+| 類別 | 有／無 | 條目 |
+|---|---|---|
+| 資料形狀與格式 | 有 | #25（儲能電池基礎容量定為 48 kWh）、#26（未維護容量衰減斷電歸因條件） |
+| 存放位置與命名 | 有 | #29（`GET /api/verify` 回傳相對路徑 `contracts/afterlight/src/lib.rs`） |
+| API 契約與錯誤行為 | 有 | #27（`POST /api/simulate` 排程長度上限 14 回合與轉手欄位成對檢查）、#28（`NEP-366` 守衛綁定 `methodName` 與 `action.kind`） |
+| 新增的相依套件 | 有 | #30（`package.json` 釘定 `next@16.3.6`、`react@19.1.0`、`fast-check@4.6.0`；Rust `Cargo.toml` 釘定 `near-sdk = "=5.29.0"`） |
+| 並行與效能取捨 | 無 | 後端 API 與 CLI 皆為同步純記憶體整數運算（`verify:judge` 耗時約 158 ms），無額外快取或重試佇列 |
+| 範圍解讀 | 有 | #25、#26 |
+| 測試設定改動 | 無 | 使用 Node 24 原生 `node --experimental-strip-types --test tests/*.test.ts` 與 `RUSTFLAGS="--cfg clippy" cargo test`，未放寬 timeout、skip 或斷言 |
+| 會被照抄的模式 | 有 | #27、#28 |
+
+### #25 儲能電池基礎容量設為 48 kWh，使單顆電池在滿載或輕度磨損下加上走廊 45 kWh 可支應日蝕 50 kWh 負載
+
+- **何時**：Ticket 01 commit `0cf16c1`（`src/engine/constants.ts:19`、`contracts/afterlight/src/lib.rs:10`）
+- **決定**：觸發：日蝕負載為 `50 kWh`，輸電走廊上限為 `45 kWh`，每回合每台設備會產生 `600 bps` 磨損（自動維修可回復 `500 bps`，淨磨損 `100 bps/回合`）。如果電池基礎容量只設 `40 kWh`，一旦累積磨損或分攤充電，到了第 12–14 回合日蝕時很容易因單顆電池差 1 kWh 而非預期斷電。現在：將兩顆 `CryoCell` 儲能電池的基礎容量定為 `48 kWh`（`BATTERY_BASE_CAPACITY_KWH = 48`），既保證兩顆都留在 `SOLAR_ARRAY` 時仍會因走廊 `45 kWh < 50 kWh` 在第 2 回合斷電（`CORRIDOR_BOTTLENECK_BLACKOUT`），又讓平衡維護策略（`03-balanced-survival-walkthrough`）能穩定撐過全部 14 回合。沒選的做法：設成 `40 kWh`，會導致後段回合對微小磨損過度敏感；設成 `60 kWh` 以上則單顆電池就能獨立扛完 50 kWh 日蝕，削弱雙電池協同調度的策略張力。
+- **規格缺口**：spec 正文曾以 `40 kWh` 作為舉例數字，但未規定精確平衡常數。
+- **影響範圍**：`golden-turn-vectors.json`、Rust 合約與 TypeScript 引擎統一引用 `48 kWh`。
+- **判定**：sound — 兼顧「第 2 回合走廊瓶頸必死」與「14 回合平衡調度必活」的數學邊界。
+- **把握度**：高
+
+### #26 未維護（0% Skim）導致容量衰減而供電不足且走廊未飽和時，歸因為 `UNMAINTAINED_CAPACITY_DECAY`
+
+- **何時**：Closeout review fix（`src/engine/afterlight-engine.ts:575-581`、`contracts/afterlight/src/lib.rs:349-355`）
+- **決定**：觸發：當玩家將維修準備金設為 `0 bps`（`0% Skim`）且電池已正確移防（Alpha 在居住穹頂、Beta 在發電翼）時，第 4 回合日蝕會因磨損達 `1800..2400 bps` 使有效容量降為 `39 kWh`、總供電 `49 kWh < 50 kWh`（`unmetLoadKwh = 1`），此時輸電走廊流量僅 `39 kWh < 45 kWh`（`corridorClampedKwh = 0`，走廊並未限流）。若只看 `maxWear >= 6000 bps` 才算磨損崩潰，這個案例會掉進 `unmetLoadKwh > 0` 而被誤判為「走廊飽和瓶頸（`CORRIDOR_BOTTLENECK_BLACKOUT`）」。現在：當 `maxWear >= CRITICAL_WEAR_THRESHOLD_BPS` **或** `unmetLoadKwh > 0 && corridorClampedKwh === 0 && maxWear > 0` 時，一律判定為 `UNMAINTAINED_CAPACITY_DECAY`；只有 `unmetLoadKwh > 0 && corridorClampedKwh > 0`（走廊確實發生限流夾斷）才判為 `CORRIDOR_BOTTLENECK_BLACKOUT`。沒選的做法：把每回合磨損調高到 `2000 bps`，那會讓正常局太快損壞。
+- **規格缺口**：spec 列了三種單一死因代碼，但沒寫當「磨損導致容量不足」早於 `6000 bps` 發生時的歸因優先序。
+- **影響範圍**：Rust 合約 `step_pure_turn` 與 TypeScript `applyStationAction` 同步更新，且既有 3 組 `golden-turn-vectors.json`（其中走廊斷電案例的 `corridorClampedKwh = 5 > 0`）完全不受影響。
+- **判定**：sound — 消除畫面收據顯示「走廊流量 39/45 卻宣稱走廊在 45 kWh 飽和」的矛盾。
+- **把握度**：高
+
+### #27 `POST /api/simulate` 限制自訂排程最多 14 回合，並強制驗證 `transferTokenId` 與 `transferToOwnerId` 成對與合法性
+
+- **何時**：Closeout review fix（`app/api/simulate/route.ts:64-138`）
+- **決定**：觸發：Ticket 03 Criterion `3.1` 要求對無效的 action payload 回傳 HTTP 400（`InvalidSimulationRequest`）。原本 `route.ts` 只驗證電價與電池區域，沒檢查 `schedule` 內的 `transferTokenId` 與 `transferToOwnerId`，也沒限制 `schedule` 陣列長度。現在：限制 `1 <= schedule.length <= 14`，且若提供轉手欄位，兩欄必須同時為合法字串、`transferTokenId` 必須屬於 4 台設備之一、`transferToOwnerId` 必須符合帳號字元規範且不得為 `Object.prototype` 原型鍵，否則一律回傳 HTTP 400 `InvalidSimulationRequest`。沒選的做法：讓無效轉手靜默被引擎忽略並回傳 HTTP 200，這會違反 `3.1` 的錯誤契約。
+- **規格缺口**：spec 沒細列自訂排程裡轉手欄位的 HTTP 400 檢查條件。
+- **影響範圍**：所有打 `POST /api/simulate` 的呼叫端在傳入未知設備 ID 或不完整轉手參數時會收到明確的 HTTP 400。
+- **判定**：sound — 對齊 Ticket 03.1 驗收條件並補上回歸測試。
+- **把握度**：高
+
+### #28 `verifyAndExecuteNep366Delegate` 強制綁定信封的 `methodName` 與實際執行的 `action.kind`
+
+- **何時**：Closeout review fix（`src/engine/nep366-session-guard.ts:64-125`）
+- **決定**：觸發：收尾安全審查發現，中繼者若拿玩家已簽署的 `route_battery` 合法信封，在呼叫 `verifyAndExecuteNep366Delegate(envelope, action, state)` 時把第二個參數 `action` 換成 `TransferEquipmentNft`，原本守衛只驗 `envelope.methodName` 在白名單內就放行，導致中繼者可調包動作轉走玩家的 NFT。現在：建立 `DELEGATE_METHOD_TO_ACTION_KIND` 一對一映射表（例如 `route_battery` 只准執行 `RouteBattery`、`nft_transfer` 只准執行 `TransferEquipmentNft`），不匹配即以 `DisallowedDelegateActionKind` 拒絕；同時對 `nonce`、`lastNonce`、`currentBlockHeight`、`maxBlockHeight`、`attachedDepositYocto` 檢查 `Number.isSafeInteger`。沒選的做法：只靠呼叫端自己傳對成對參數，這會讓守衛函式本身留下調包漏洞。
+- **規格缺口**：spec 只列出 `ALLOWED_DELEGATE_METHODS` 白名單，未明寫信封方法名稱與動作物件 `kind` 的映射檢查。
+- **影響範圍**：任何呼叫 `verifyAndExecuteNep366Delegate` 的地方都必須傳入與 `envelope.methodName` 對應的 `action.kind`。
+- **判定**：sound — 補齊 `NEP-366` 雙層授權守衛的核心安全不變量。
+- **把握度**：高
+
+### #29 `runJudgeAudit` 的 `rustContractCheck.contractPath` 改回傳相對於專案根目錄的路徑
+
+- **何時**：Closeout review fix（`src/verifier/judge-audit-runner.ts:648-650`）
+- **決定**：觸發：`GET /api/verify` 直接回傳 `runJudgeAudit()` 的結果，原本 `contractPath` 存的是 `path.resolve` 後的本機絕對路徑（含 `/Users/...` 家目錄名稱）。現在：檔案讀取仍用絕對路徑，但寫入報表的 `contractPath` 改用 `path.relative(baseDir, contractPath) || "contracts/afterlight/src/lib.rs"`。沒選的做法：維持絕對路徑，只在前端介面截斷，這樣直接打 API 的外部呼叫端仍會看到伺服器目錄結構。
+- **規格缺口**：spec 只寫報表含 `rustContractCheck`，沒規定路徑欄位用絕對或相對路徑。
+- **影響範圍**：`npm run verify:judge` 與 `GET /api/verify` 的 `contractPath` 統一輸出 `"contracts/afterlight/src/lib.rs"`。
+- **判定**：sound — 消除本機路徑暴露且與前端顯示一致。
+- **把握度**：高
+
+### #30 選用與 `near-ghost-shift` 對齊的零外部資料庫技術棧（Next.js 16.3.6 + React 19.1.0 + fast-check 4.6.0 + near-sdk =5.29.0）
+
+- **何時**：Ticket 01 commit `0cf16c1`（`package.json`、`contracts/afterlight/Cargo.toml`）
+- **決定**：觸發：為了讓評審在 60 秒內無須設定任何外部環境變數或資料庫即可跑完 `npm run verify:judge` 與 Next.js 指揮艙，同時避開 `near-sdk 5.30.0` MSRV 1.86 斷裂。現在：前端與驗證器採用 `next@16.3.6`、`react@19.1.0`、`fast-check@4.6.0` 與 Node 24 原生 `--experimental-strip-types` 測試執行器；Rust 合約精確釘定 `near-sdk = "=5.29.0"` 並提交 `Cargo.lock`。沒選的做法：引入額外測試框架（Vitest/Jest）或 `near-contract-standards`（未升級支援 `near-sdk 5.x`）。
+- **規格缺口**：spec 指定了 `near-sdk = "=5.29.0"` 與 `fast-check`，其餘套件版本由實作者對齊本機基準。
+- **影響範圍**：全專案零外部服務依賴，`npm test` 約 0.55 秒完成。
+- **判定**：sound — 已於 `/review-brainstorm` Seat 2 與 Seat 4 驗證相容性。
+- **把握度**：高
+

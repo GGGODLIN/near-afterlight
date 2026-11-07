@@ -53,6 +53,48 @@ test("Ticket 03.1 (Failure F2): POST /api/simulate returns 200 with 14-turn rece
   });
   const resBadPreset = await simulatePost(reqBadPreset);
   assert.equal(resBadPreset.status, 400);
+
+  // Custom policy schedule -> HTTP 200
+  const reqCustom = new Request("http://localhost:3000/api/simulate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      schedule: [
+        {
+          gridPriceTier: "BALANCED",
+          maintenanceReserveBps: 2000,
+          batAlphaZone: "HABITAT_DOME",
+          batBetaZone: "SOLAR_ARRAY",
+          transferTokenId: "gen-solar-1",
+          transferToOwnerId: "operator-b.afterlight.testnet",
+        },
+      ],
+    }),
+  });
+  const resCustom = await simulatePost(reqCustom);
+  assert.equal(resCustom.status, 200);
+
+  // Invalid transferTokenId in schedule -> HTTP 400 InvalidSimulationRequest
+  const reqBadTransfer = new Request("http://localhost:3000/api/simulate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      schedule: [
+        {
+          gridPriceTier: "BALANCED",
+          maintenanceReserveBps: 2000,
+          batAlphaZone: "HABITAT_DOME",
+          batBetaZone: "SOLAR_ARRAY",
+          transferTokenId: "nonexistent-nft-999",
+          transferToOwnerId: "operator-b.afterlight.testnet",
+        },
+      ],
+    }),
+  });
+  const resBadTransfer = await simulatePost(reqBadTransfer);
+  assert.equal(resBadTransfer.status, 400);
+  const bodyBadTransfer = (await resBadTransfer.json()) as { error: string };
+  assert.equal(bodyBadTransfer.error, "InvalidSimulationRequest");
 });
 
 test("Ticket 03.2 (Failure F1): Switching from BLACKOUT preset to 03-balanced-survival-walkthrough clears collapseRootCause and restores SURVIVED", async () => {
@@ -98,10 +140,13 @@ test("Ticket 03.3: GET /api/verify returns HTTP 200 with PASS JudgeVerificationR
   const body = (await res.json()) as {
     verdict: string;
     tracks: string[];
+    rustContractCheck: { contractPath: string };
     pbtSuite: { passed: boolean; witnessFloorsPassed: boolean };
   };
   assert.equal(body.verdict, "PASS");
   assert.deepEqual(body.tracks, ["games", "nfts"]);
+  assert.equal(body.rustContractCheck.contractPath, "contracts/afterlight/src/lib.rs");
+  assert.equal(body.rustContractCheck.contractPath.startsWith("/"), false);
   assert.equal(body.pbtSuite.passed, true);
   assert.equal(body.pbtSuite.witnessFloorsPassed, true);
 });
@@ -124,6 +169,7 @@ test("Ticket 03.5 (Failure F5): Bilingual README.md and README.zh-TW.md document
     assert.equal(doc.includes("https://github.com/GGGODLIN/near-ghost-shift"), true);
     assert.equal(doc.includes("Q-015"), true);
     assert.equal(doc.includes("NEP-171"), true);
+    assert.equal(doc.includes("NEP-141"), true);
     assert.equal(doc.includes("NEP-366"), true);
   }
 });

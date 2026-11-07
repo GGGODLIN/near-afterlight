@@ -251,6 +251,24 @@ function rejectAction(
   };
 }
 
+const ACCOUNT_ID_PATTERN = /^[a-z0-9._-]+$/i;
+const FORBIDDEN_PROTOTYPE_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+  "toString",
+  "valueOf",
+]);
+
+function isValidAccountId(accountId: unknown): accountId is string {
+  return (
+    typeof accountId === "string" &&
+    accountId.length > 0 &&
+    ACCOUNT_ID_PATTERN.test(accountId) &&
+    !FORBIDDEN_PROTOTYPE_KEYS.has(accountId)
+  );
+}
+
 export function applyStationAction(
   state: Readonly<StationState>,
   action: StationAction,
@@ -259,13 +277,14 @@ export function applyStationAction(
     return rejectAction(state, "TerminalBlackoutImmutable");
   }
 
-  if (!action.actorId || typeof action.actorId !== "string") {
+  if (!isValidAccountId(action.actorId)) {
     return rejectAction(state, "InvalidStationParameters");
   }
 
   if (action.kind === "SetPolicy") {
     if (
-      !(action.gridPriceTier in GRID_PRICE_TIERS) ||
+      typeof action.gridPriceTier !== "string" ||
+      !Object.hasOwn(GRID_PRICE_TIERS, action.gridPriceTier) ||
       !Number.isSafeInteger(action.maintenanceReserveBps) ||
       action.maintenanceReserveBps < 0 ||
       action.maintenanceReserveBps > 10_000
@@ -285,7 +304,11 @@ export function applyStationAction(
   }
 
   if (action.kind === "RouteBattery") {
-    const eq = state.equipment[action.tokenId];
+    const eq =
+      typeof action.tokenId === "string" &&
+      Object.hasOwn(state.equipment, action.tokenId)
+        ? state.equipment[action.tokenId]
+        : undefined;
     if (!eq) {
       return rejectAction(state, "InvalidStationParameters");
     }
@@ -309,8 +332,12 @@ export function applyStationAction(
   }
 
   if (action.kind === "TransferEquipmentNft") {
-    const eq = state.equipment[action.tokenId];
-    if (!eq || !action.toOwnerId || typeof action.toOwnerId !== "string") {
+    const eq =
+      typeof action.tokenId === "string" &&
+      Object.hasOwn(state.equipment, action.tokenId)
+        ? state.equipment[action.tokenId]
+        : undefined;
+    if (!eq || !isValidAccountId(action.toOwnerId)) {
       return rejectAction(state, "InvalidStationParameters");
     }
     if (eq.ownerId !== action.actorId || action.toOwnerId === eq.ownerId) {
@@ -320,7 +347,7 @@ export function applyStationAction(
     const targetEq = next.equipment[action.tokenId];
     targetEq.ownerId = action.toOwnerId;
     targetEq.transferCount += 1;
-    if (next.accountCredits[action.toOwnerId] === undefined) {
+    if (!Object.hasOwn(next.accountCredits, action.toOwnerId)) {
       next.accountCredits[action.toOwnerId] = 0;
     }
     return {
@@ -332,7 +359,11 @@ export function applyStationAction(
   }
 
   if (action.kind === "RepairEquipment") {
-    const eq = state.equipment[action.tokenId];
+    const eq =
+      typeof action.tokenId === "string" &&
+      Object.hasOwn(state.equipment, action.tokenId)
+        ? state.equipment[action.tokenId]
+        : undefined;
     if (!eq) {
       return rejectAction(state, "InvalidStationParameters");
     }
@@ -519,8 +550,10 @@ export function applyStationAction(
       const sup = powerSuppliers[i];
       const amt = payouts[i];
       sup.cumulativeEarnedCredits += amt;
-      next.accountCredits[sup.ownerId] =
-        (next.accountCredits[sup.ownerId] ?? 0) + amt;
+      const currentBalance = Object.hasOwn(next.accountCredits, sup.ownerId)
+        ? next.accountCredits[sup.ownerId]
+        : 0;
+      next.accountCredits[sup.ownerId] = currentBalance + amt;
     }
 
     // Step 5: Wear Accrual & Closed-Loop Auto-Maintenance
@@ -559,7 +592,10 @@ export function applyStationAction(
       next.o2Level = 0;
       next.stationStatus = "BLACKOUT";
       collapseRootCause = "SCRUBBER_SOLVENCY_COLLAPSE";
-    } else if (maxWear >= CRITICAL_WEAR_THRESHOLD_BPS) {
+    } else if (
+      maxWear >= CRITICAL_WEAR_THRESHOLD_BPS ||
+      (unmetLoadKwh > 0 && corridorClampedKwh === 0 && maxWear > 0)
+    ) {
       next.o2Level = 0;
       next.stationStatus = "BLACKOUT";
       collapseRootCause = "UNMAINTAINED_CAPACITY_DECAY";

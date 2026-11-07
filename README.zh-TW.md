@@ -21,7 +21,21 @@
 2. **高壓輸電走廊（`TRANSMISSION_CORRIDOR`）**：每回合最大輸電上限為 `corridorCapKwh = 45 kWh`。
 3. **居住與製氧穹頂（`HABITAT_DOME`）**：部署 `o2-scrubber-1`（`Aegis-IV` 製氧機 NFT），白晝需電 `35 kWh`（居住 `20 kWh` + 製氧 `15 kWh`），日蝕長夜因保溫加熱器啟動需電 **`50 kWh`**。
 
-因為日蝕長夜的總需求（`50 kWh`）大於輸電走廊上限（`45 kWh`），**就算兩顆 `CryoCell` 儲能電池 NFT（`bat-alpha-1` 與 `bat-beta-2`）在發電翼充滿電，一旦忘記在日蝕前把電池移防到居住穹頂就地放電，電力就會卡死在 `45 kWh` 走廊上限而引發斷電（`CORRIDOR_BOTTLENECK_BLACKOUT`）**；同理，若貪婪拉高暴利電價（`8 CR/kWh`）會害製氧機在第 4 回合破產斷氧（`SCRUBBER_SOLVENCY_COLLAPSE`），若提撥 `0 bps` 維修金則會因設備磨損爆表而崩潰（`UNMAINTAINED_CAPACITY_DECAY`）。
+因為日蝕長夜的總需求（`50 kWh`）大於輸電走廊上限（`45 kWh`），**就算兩顆 `CryoCell` 儲能電池 NFT（`bat-alpha-1` 與 `bat-beta-2`）在發電翼充滿電，一旦忘記在日蝕前把電池移防到居住穹頂就地放電，電力就會卡死在 `45 kWh` 走廊上限而引發斷電（`CORRIDOR_BOTTLENECK_BLACKOUT`）**；同理，若貪婪拉高暴利電價（`8 CR/kWh`）會害製氧機在第 4 回合破產斷氧（`SCRUBBER_SOLVENCY_COLLAPSE`），若提撥 `0 bps` 維修金則會因設備磨損衰減有效容量而崩潰（`UNMAINTAINED_CAPACITY_DECAY`）。
+
+---
+
+## Afterlight 如何使用 4 項原生 NEAR 原語
+
+1. **`NEP-171` 動態磨損設備 NFT（`contracts/afterlight/src/lib.rs`, `near-sdk = "=5.29.0"`）**：
+   - 每台設備（`gen-solar-1`、`bat-alpha-1`、`bat-beta-2`、`o2-scrubber-1`）都是一張動態 `NEP-171` NFT，儲存即時鏈上狀態：`ownerId`、`zone`、`chargeKwh`、`maxCapacityKwh`、`wearBps`、`reserveCredits`、`cumulativeEarnedCredits` 與 `transferCount`（鏈上 `handover_history`）。
+   - 轉手設備（`nft_transfer`）會把未來電費分潤與鎖定在設備內的 `reserveCredits` 交接給新營運商，並嚴格保留 `wearBps`、`chargeKwh` 與 `zone`（`P3` 轉手不洗白與反女巫拆分不變性）。
+2. **`NEP-141` 相容閉環太空站點數帳本（Closed-Loop Station Credits）**：
+   - 全站 `10,000 CR` 點數在 `operatorA`、`operatorB`、`colonistDemandPool`、`stationTreasury` 與各設備 `reserveCredits` 之間嚴格閉環守恆（`P1` 貨幣守恆）。
+3. **`NEP-366` 雙層免錢包彈窗委託簽章守衛（`src/engine/nep366-session-guard.ts`）**：
+   - 玩家透過臨時會話金鑰簽署 `NEP-366` `SignedDelegate` 信封即可 **0 錢包彈窗**操作電網，守衛分離 `envelopeVerdict`（驗簽、`attachedDepositYocto === 0`、方法與動作綁定、單調 `nonce`、區塊高度期限）與 `executionVerdict`（`effectivePredecessorId === senderId`，阻擋中繼者盜轉玩家 NFT）。
+4. **跨語言整數基點（`bps: 0..10_000`）黃金向量同構驗證**：
+   - NEAR Rust 智慧合約（`contracts/afterlight/src/lib.rs`）與 TypeScript 引擎（`src/engine/afterlight-engine.ts`）執行完全相同的 6 步整數基點回合管線，並由 `src/scenarios/golden-turn-vectors.json` 對照驗證。
 
 ---
 
@@ -47,3 +61,9 @@
   ```
 - **See Y**：
   - 14 項 TypeScript 測試與 Rust 合約單元測試全數通過（0 失敗）。
+
+### 步驟 3：啟動互動式太空站橫切面戰術指揮艙
+- **Do X**：
+  執行 `npm run dev` 並開啟 `http://localhost:3000`。
+- **See Y**：
+  - 調整 3 項戰術控制（**Grid Price Tier**、**Maintenance Reserve**、**Battery Zone Routing**），點擊 **7-Day Fast-Forward** 播放 3 組 14 回合劇本，實測一鍵 **`Handover NFT to Operator B`** 與 **`Simulate Exploit: Wash Wear / Unauthorized Siphon`**，並展開底部 **Judge & On-Chain Inspector** 抽屜執行 **`Run Judge Verification`**。

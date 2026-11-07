@@ -79,6 +79,23 @@ test("Ticket 02.3 (Failure F2): runJudgeAudit emits firstDivergence diagnostic o
   assert.ok(
     faultyReport.pbtSuite.firstDivergence.violatedInvariants.includes("P1"),
   );
+  assert.ok(faultyReport.pbtSuite.firstDivergence.ledgerDiff.length > 0);
+
+  // Faulty TransferEquipmentNft step is replayed in counterexample replay and captured in firstDivergence
+  const faultyTransferReport = runJudgeAudit({
+    customActionRunner: (state, action) => {
+      const res = applyStationAction(state, action);
+      if (action.kind === "TransferEquipmentNft" && res.accepted) {
+        res.state.equipment[action.tokenId].wearBps = 0;
+      }
+      return res;
+    },
+  });
+  assert.equal(faultyTransferReport.verdict, "FAIL");
+  assert.ok(faultyTransferReport.pbtSuite.firstDivergence !== null);
+  assert.ok(
+    faultyTransferReport.pbtSuite.firstDivergence.violatedInvariants.includes("P3"),
+  );
 
   // Unmet witness floor causes verdict FAIL
   const unmetWitnessReport = runJudgeAudit({

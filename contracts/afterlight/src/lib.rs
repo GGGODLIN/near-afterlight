@@ -228,6 +228,7 @@ pub fn step_pure_turn(state: &mut PureStationState) -> Result<(), &'static str> 
 
     let desired_solar_to_habitat = solar_generated_kwh.min(solvent_target_load_kwh);
     let solar_to_habitat_via_corridor = desired_solar_to_habitat.min(state.corridor_cap_kwh);
+    let mut corridor_clamped_kwh = desired_solar_to_habitat - solar_to_habitat_via_corridor;
 
     let mut remaining_habitat_need = solvent_target_load_kwh - solar_to_habitat_via_corridor;
     let mut remaining_corridor_cap = state.corridor_cap_kwh - solar_to_habitat_via_corridor;
@@ -249,6 +250,7 @@ pub fn step_pure_turn(state: &mut PureStationState) -> Result<(), &'static str> 
         if bat.zone == "SOLAR_ARRAY" && remaining_habitat_need > 0 {
             let available = bat.charge_kwh.min(remaining_habitat_need);
             let transmitted = available.min(remaining_corridor_cap);
+            corridor_clamped_kwh += available - transmitted;
             bat.charge_kwh -= transmitted;
             remaining_habitat_need -= transmitted;
             remaining_corridor_cap -= transmitted;
@@ -278,6 +280,7 @@ pub fn step_pure_turn(state: &mut PureStationState) -> Result<(), &'static str> 
             let room = eff_cap.saturating_sub(bat.charge_kwh);
             let desired_charge = remaining_solar.min(room);
             let transmitted_charge = desired_charge.min(remaining_corridor_cap);
+            corridor_clamped_kwh += desired_charge - transmitted_charge;
             bat.charge_kwh += transmitted_charge;
             remaining_solar -= transmitted_charge;
             remaining_corridor_cap -= transmitted_charge;
@@ -346,7 +349,9 @@ pub fn step_pure_turn(state: &mut PureStationState) -> Result<(), &'static str> 
         state.o2_level = 0;
         state.station_status = "BLACKOUT".to_string();
         state.collapse_root_cause = Some("SCRUBBER_SOLVENCY_COLLAPSE".to_string());
-    } else if max_wear >= CRITICAL_WEAR_THRESHOLD_BPS {
+    } else if max_wear >= CRITICAL_WEAR_THRESHOLD_BPS
+        || (unmet_load_kwh > 0 && corridor_clamped_kwh == 0 && max_wear > 0)
+    {
         state.o2_level = 0;
         state.station_status = "BLACKOUT".to_string();
         state.collapse_root_cause = Some("UNMAINTAINED_CAPACITY_DECAY".to_string());
@@ -389,21 +394,47 @@ pub struct AfterlightContract {
 impl AfterlightContract {
     #[init]
     pub fn new() -> Self {
-        Self {
-            equipment_by_token: LookupMap::new(StorageKey::EquipmentByToken),
-            credits_by_account: LookupMap::new(StorageKey::CreditsByAccount),
-            delegate_nonces: LookupMap::new(StorageKey::DelegateNonces),
-            turn: 0,
-            station_status: "ACTIVE".to_string(),
-            collapse_root_cause: None,
-            corridor_cap_kwh: DEFAULT_CORRIDOR_CAP_KWH,
-            o2_level: 100,
-            grid_price_tier: "BALANCED".to_string(),
-            grid_price_per_kwh: 4,
-            maintenance_reserve_bps: 2_000,
-            colonist_demand_pool_credits: 5_000,
-            station_treasury_credits: 1_800,
+        let initial = create_initial_pure_state(DEFAULT_CORRIDOR_CAP_KWH);
+        let mut equipment_by_token = LookupMap::new(StorageKey::EquipmentByToken);
+        for (token_id, eq) in initial.equipment {
+            equipment_by_token.insert(token_id, eq);
         }
+        let mut credits_by_account = LookupMap::new(StorageKey::CreditsByAccount);
+        for (acct, bal) in initial.account_credits {
+            if let Ok(parsed) = acct.parse::<AccountId>() {
+                credits_by_account.insert(parsed, bal);
+            }
+        }
+        Self {
+            equipment_by_token,
+            credits_by_account,
+            delegate_nonces: LookupMap::new(StorageKey::DelegateNonces),
+            turn: initial.turn,
+            station_status: initial.station_status,
+            collapse_root_cause: initial.collapse_root_cause,
+            corridor_cap_kwh: initial.corridor_cap_kwh,
+            o2_level: initial.o2_level,
+            grid_price_tier: initial.grid_price_tier,
+            grid_price_per_kwh: initial.grid_price_per_kwh,
+            maintenance_reserve_bps: initial.maintenance_reserve_bps,
+            colonist_demand_pool_credits: initial.colonist_demand_pool_credits,
+            station_treasury_credits: initial.station_treasury_credits,
+        }
+    }
+
+    pub fn set_policy(&mut self, grid_price_tier: String, maintenance_reserve_bps: u64) {
+        require!(
+            self.station_status != "BLACKOUT",
+            "TerminalBlackoutImmutable"
+        );
+        let price = grid_price_for_tier(&grid_price_tier).expect("InvalidStationParameters");
+        require!(
+            maintenance_reserve_bps <= 10_000,
+            "InvalidStationParameters"
+        );
+        self.grid_price_tier = grid_price_tier;
+        self.grid_price_per_kwh = price;
+        self.maintenance_reserve_bps = maintenance_reserve_bps;
     }
 
     pub fn nft_token(&self, token_id: String) -> Option<EquipmentNft> {
@@ -445,6 +476,9 @@ impl AfterlightContract {
             preserved_reserve_credits: eq.reserve_credits,
             preserved_charge_kwh: eq.charge_kwh,
         });
+        if self.credits_by_account.get(&receiver_id).is_none() {
+            self.credits_by_account.insert(receiver_id, 0);
+        }
         self.equipment_by_token.insert(token_id, eq);
     }
 
@@ -494,15 +528,51 @@ impl AfterlightContract {
     }
 
     pub fn advance_turn(&mut self) {
-        require!(
-            self.station_status != "BLACKOUT",
-            "TerminalBlackoutImmutable"
-        );
-        require!(
-            self.turn < ORBIT_WEEK_TURNS && self.station_status != "SURVIVED",
-            "OrbitScheduleCompleted"
-        );
-        self.turn += 1;
+        let ids = ["gen-solar-1", "bat-alpha-1", "bat-beta-2", "o2-scrubber-1"];
+        let mut equipment = BTreeMap::new();
+        let mut account_credits = BTreeMap::new();
+        for id in ids {
+            let eq = self
+                .equipment_by_token
+                .get(id)
+                .cloned()
+                .expect("InvalidStationParameters");
+            if let Ok(owner_acct) = eq.owner_id.parse::<AccountId>() {
+                let bal = self.credits_by_account.get(&owner_acct).copied().unwrap_or(0);
+                account_credits.insert(eq.owner_id.clone(), bal);
+            }
+            equipment.insert(id.to_string(), eq);
+        }
+        let mut pure_state = PureStationState {
+            turn: self.turn,
+            max_turns: ORBIT_WEEK_TURNS,
+            station_status: self.station_status.clone(),
+            collapse_root_cause: self.collapse_root_cause.clone(),
+            corridor_cap_kwh: self.corridor_cap_kwh,
+            o2_level: self.o2_level,
+            grid_price_tier: self.grid_price_tier.clone(),
+            grid_price_per_kwh: self.grid_price_per_kwh,
+            maintenance_reserve_bps: self.maintenance_reserve_bps,
+            colonist_demand_pool_credits: self.colonist_demand_pool_credits,
+            station_treasury_credits: self.station_treasury_credits,
+            account_credits,
+            equipment,
+        };
+        step_pure_turn(&mut pure_state).unwrap_or_else(|err| env::panic_str(err));
+        self.turn = pure_state.turn;
+        self.station_status = pure_state.station_status;
+        self.collapse_root_cause = pure_state.collapse_root_cause;
+        self.o2_level = pure_state.o2_level;
+        self.colonist_demand_pool_credits = pure_state.colonist_demand_pool_credits;
+        self.station_treasury_credits = pure_state.station_treasury_credits;
+        for (acct_str, bal) in pure_state.account_credits {
+            if let Ok(parsed) = acct_str.parse::<AccountId>() {
+                self.credits_by_account.insert(parsed, bal);
+            }
+        }
+        for (id, eq) in pure_state.equipment {
+            self.equipment_by_token.insert(id, eq);
+        }
     }
 
     pub fn execute_nep366_delegate(
@@ -512,6 +582,10 @@ impl AfterlightContract {
         max_block_height: u64,
         method_name: String,
     ) {
+        require!(
+            env::predecessor_account_id() == sender_id,
+            "UnauthorizedDelegateCaller"
+        );
         require!(
             env::attached_deposit().as_yoctonear() == 0,
             "NonZeroAttachedDepositForbidden"
@@ -619,5 +693,27 @@ mod tests {
                 vec.id
             );
         }
+    }
+
+    #[test]
+    fn pure_skim_decay_triggers_unmaintained_capacity_decay() {
+        let mut state = create_initial_pure_state(DEFAULT_CORRIDOR_CAP_KWH);
+        assert!(state.equipment.contains_key("gen-solar-1"));
+        assert_eq!(
+            state.account_credits.get("commander-a.afterlight.testnet").copied(),
+            Some(1_200)
+        );
+        state.grid_price_tier = "BALANCED".to_string();
+        state.grid_price_per_kwh = grid_price_for_tier("BALANCED").unwrap();
+        state.maintenance_reserve_bps = 0;
+        for _ in 0..4 {
+            let _ = step_pure_turn(&mut state);
+        }
+        assert_eq!(state.turn, 4);
+        assert_eq!(state.station_status, "BLACKOUT");
+        assert_eq!(
+            state.collapse_root_cause,
+            Some("UNMAINTAINED_CAPACITY_DECAY".to_string())
+        );
     }
 }

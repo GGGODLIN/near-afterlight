@@ -61,6 +61,17 @@ export function buildDeterministicDelegateSignature(
   return `ed25519_sig_${senderId}_${receiverId}_${methodName}_${nonce}_${maxBlockHeight}`;
 }
 
+const DELEGATE_METHOD_TO_ACTION_KIND: Record<
+  AllowedDelegateMethod,
+  StationAction["kind"]
+> = {
+  set_policy: "SetPolicy",
+  route_battery: "RouteBattery",
+  nft_transfer: "TransferEquipmentNft",
+  repair_equipment: "RepairEquipment",
+  advance_turn: "AdvanceTurn",
+};
+
 export function verifyAndExecuteNep366Delegate(
   envelope: Nep366DelegateEnvelope,
   action: StationAction,
@@ -97,20 +108,38 @@ export function verifyAndExecuteNep366Delegate(
   if (
     !ALLOWED_DELEGATE_METHODS.includes(
       envelope.methodName as AllowedDelegateMethod,
-    )
+    ) ||
+    !Object.hasOwn(DELEGATE_METHOD_TO_ACTION_KIND, envelope.methodName) ||
+    DELEGATE_METHOD_TO_ACTION_KIND[envelope.methodName as AllowedDelegateMethod] !==
+      action.kind
   ) {
     return rejectEnvelope("DisallowedDelegateActionKind");
   }
 
-  if (envelope.attachedDepositYocto !== 0) {
+  if (
+    !Number.isSafeInteger(envelope.attachedDepositYocto) ||
+    envelope.attachedDepositYocto !== 0
+  ) {
     return rejectEnvelope("NonZeroAttachedDepositForbidden");
   }
 
-  if (envelope.currentBlockHeight > envelope.maxBlockHeight) {
+  if (
+    !Number.isSafeInteger(envelope.currentBlockHeight) ||
+    !Number.isSafeInteger(envelope.maxBlockHeight) ||
+    envelope.currentBlockHeight < 0 ||
+    envelope.maxBlockHeight < 0 ||
+    envelope.currentBlockHeight > envelope.maxBlockHeight
+  ) {
     return rejectEnvelope("ExpiredMaxBlockHeight");
   }
 
-  if (envelope.nonce <= envelope.lastNonce) {
+  if (
+    !Number.isSafeInteger(envelope.nonce) ||
+    !Number.isSafeInteger(envelope.lastNonce) ||
+    envelope.nonce < 0 ||
+    envelope.lastNonce < 0 ||
+    envelope.nonce <= envelope.lastNonce
+  ) {
     return rejectEnvelope("StaleDelegateNonce");
   }
 

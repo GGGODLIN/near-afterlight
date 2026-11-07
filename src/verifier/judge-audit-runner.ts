@@ -15,7 +15,10 @@ import {
   type StationActionOutcome,
   type StationState,
 } from "../engine/afterlight-engine.ts";
-import { evaluateAfterlightOracleStep } from "../engine/afterlight-oracle.ts";
+import {
+  evaluateAfterlightOracleStep,
+  type AfterlightStepOracleVerdict,
+} from "../engine/afterlight-oracle.ts";
 import {
   buildDeterministicDelegateSignature,
   verifyAndExecuteNep366Delegate,
@@ -32,6 +35,7 @@ interface FirstDivergenceDiagnostic {
   turnIndex: number;
   orbitalPhase: "DAYLIGHT" | "ECLIPSE";
   violatedInvariants: Array<"P1" | "P2" | "P3" | "P4">;
+  ledgerDiff: AfterlightStepOracleVerdict["ledgerDiff"];
   failureDetails: string[];
 }
 
@@ -163,6 +167,8 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
       expectedTotalCredits: number;
       expectedO2Level: number;
       expectedGenSolarWearBps: number;
+      expectedColonistCredits: number;
+      expectedTreasuryCredits: number;
     }>;
 
     for (const vec of vectors) {
@@ -201,7 +207,9 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
         state.collapseRootCause === vec.expectedCollapseRootCause &&
         sumAllStationCredits(state) === vec.expectedTotalCredits &&
         state.o2Level === vec.expectedO2Level &&
-        state.equipment["gen-solar-1"].wearBps === vec.expectedGenSolarWearBps
+        state.equipment["gen-solar-1"].wearBps === vec.expectedGenSolarWearBps &&
+        state.colonistDemandPoolCredits === vec.expectedColonistCredits &&
+        state.stationTreasuryCredits === vec.expectedTreasuryCredits
       ) {
         goldenVectorsMatchedCount += 1;
       }
@@ -271,61 +279,77 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
     fc.array(stressTurnStepArb, { minLength: 14, maxLength: 14 }),
   );
 
+  const buildCandidateStepActions = (
+    state: Readonly<StationState>,
+    s: {
+      gridPriceTier: "SUBSIDIZED" | "BALANCED" | "SURGE";
+      maintenanceReserveBps: number;
+      routeAlphaTo: "SOLAR_ARRAY" | "HABITAT_DOME";
+      routeBetaTo: "SOLAR_ARRAY" | "HABITAT_DOME";
+      transferTokenId: string | null;
+      useValidOwnerForTransfer: boolean;
+      triggerRepairOn: string | null;
+    },
+  ): StationAction[] => {
+    const candidateActions: StationAction[] = [
+      {
+        kind: "SetPolicy",
+        actorId: DEFAULT_OPERATOR_A,
+        gridPriceTier: s.gridPriceTier,
+        maintenanceReserveBps: s.maintenanceReserveBps,
+      },
+      {
+        kind: "RouteBattery",
+        actorId: state.equipment["bat-alpha-1"]?.ownerId ?? DEFAULT_OPERATOR_A,
+        tokenId: "bat-alpha-1",
+        targetZone: s.routeAlphaTo,
+      },
+      {
+        kind: "RouteBattery",
+        actorId: state.equipment["bat-beta-2"]?.ownerId ?? DEFAULT_OPERATOR_B,
+        tokenId: "bat-beta-2",
+        targetZone: s.routeBetaTo,
+      },
+    ];
+
+    if (s.transferTokenId) {
+      const currentOwner =
+        state.equipment[s.transferTokenId]?.ownerId ?? DEFAULT_OPERATOR_A;
+      const otherActor =
+        currentOwner === DEFAULT_OPERATOR_A
+          ? DEFAULT_OPERATOR_B
+          : DEFAULT_OPERATOR_A;
+      candidateActions.push({
+        kind: "TransferEquipmentNft",
+        actorId: s.useValidOwnerForTransfer ? currentOwner : otherActor,
+        tokenId: s.transferTokenId,
+        toOwnerId: otherActor,
+      });
+    }
+
+    if (s.triggerRepairOn) {
+      const currentOwner =
+        state.equipment[s.triggerRepairOn]?.ownerId ?? DEFAULT_OPERATOR_A;
+      candidateActions.push({
+        kind: "RepairEquipment",
+        actorId: currentOwner,
+        tokenId: s.triggerRepairOn,
+      });
+    }
+
+    candidateActions.push({
+      kind: "AdvanceTurn",
+      actorId: DEFAULT_OPERATOR_A,
+    });
+    return candidateActions;
+  };
+
   const prop = fc.property(scheduleArb, (steps) => {
     let state = createInitialStationState({ corridorCapKwh: DEFAULT_CORRIDOR_CAP_KWH });
     const initialTotal = state.initialTotalCredits;
 
     for (const s of steps) {
-      const candidateActions: StationAction[] = [
-        {
-          kind: "SetPolicy",
-          actorId: DEFAULT_OPERATOR_A,
-          gridPriceTier: s.gridPriceTier,
-          maintenanceReserveBps: s.maintenanceReserveBps,
-        },
-        {
-          kind: "RouteBattery",
-          actorId: state.equipment["bat-alpha-1"]?.ownerId ?? DEFAULT_OPERATOR_A,
-          tokenId: "bat-alpha-1",
-          targetZone: s.routeAlphaTo,
-        },
-        {
-          kind: "RouteBattery",
-          actorId: state.equipment["bat-beta-2"]?.ownerId ?? DEFAULT_OPERATOR_B,
-          tokenId: "bat-beta-2",
-          targetZone: s.routeBetaTo,
-        },
-      ];
-
-      if (s.transferTokenId) {
-        const currentOwner =
-          state.equipment[s.transferTokenId]?.ownerId ?? DEFAULT_OPERATOR_A;
-        const otherActor =
-          currentOwner === DEFAULT_OPERATOR_A
-            ? DEFAULT_OPERATOR_B
-            : DEFAULT_OPERATOR_A;
-        candidateActions.push({
-          kind: "TransferEquipmentNft",
-          actorId: s.useValidOwnerForTransfer ? currentOwner : otherActor,
-          tokenId: s.transferTokenId,
-          toOwnerId: otherActor,
-        });
-      }
-
-      if (s.triggerRepairOn) {
-        const currentOwner =
-          state.equipment[s.triggerRepairOn]?.ownerId ?? DEFAULT_OPERATOR_A;
-        candidateActions.push({
-          kind: "RepairEquipment",
-          actorId: currentOwner,
-          tokenId: s.triggerRepairOn,
-        });
-      }
-
-      candidateActions.push({
-        kind: "AdvanceTurn",
-        actorId: DEFAULT_OPERATOR_A,
-      });
+      const candidateActions = buildCandidateStepActions(state, s);
 
       for (const action of candidateActions) {
         const prevState = state;
@@ -381,30 +405,7 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
 
     outer: for (let idx = 0; idx < shrunkSteps.length; idx++) {
       const s = shrunkSteps[idx];
-      const actions: StationAction[] = [
-        {
-          kind: "SetPolicy",
-          actorId: DEFAULT_OPERATOR_A,
-          gridPriceTier: s.gridPriceTier,
-          maintenanceReserveBps: s.maintenanceReserveBps,
-        },
-        {
-          kind: "RouteBattery",
-          actorId: state.equipment["bat-alpha-1"]?.ownerId ?? DEFAULT_OPERATOR_A,
-          tokenId: "bat-alpha-1",
-          targetZone: s.routeAlphaTo,
-        },
-        {
-          kind: "RouteBattery",
-          actorId: state.equipment["bat-beta-2"]?.ownerId ?? DEFAULT_OPERATOR_B,
-          tokenId: "bat-beta-2",
-          targetZone: s.routeBetaTo,
-        },
-        {
-          kind: "AdvanceTurn",
-          actorId: DEFAULT_OPERATOR_A,
-        },
-      ];
+      const actions = buildCandidateStepActions(state, s);
       for (const action of actions) {
         const prevState = state;
         const outcome = actionRunner(prevState, action);
@@ -422,6 +423,7 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
             turnIndex: idx + 1,
             orbitalPhase: (idx + 1) % 2 === 1 ? "DAYLIGHT" : "ECLIPSE",
             violatedInvariants: verdict.violatedInvariants,
+            ledgerDiff: verdict.ledgerDiff,
             failureDetails: verdict.failureDetails,
           };
           break outer;
@@ -623,7 +625,9 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
     verdict: overallPassed ? "PASS" : "FAIL",
     elapsedMs: Date.now() - startMs,
     rustContractCheck: {
-      contractPath,
+      contractPath:
+        path.relative(baseDir, contractPath) ||
+        "contracts/afterlight/src/lib.rs",
       cargoTomlPinsExact529,
       noDeprecatedStandardsCrate,
       requiredTokensFound,

@@ -37,7 +37,16 @@ export async function POST(request: Request): Promise<Response> {
     schedule?: unknown;
   };
 
-  if (typeof body.presetId === "string") {
+  if (body.presetId !== undefined) {
+    if (typeof body.presetId !== "string") {
+      return Response.json(
+        {
+          error: "InvalidSimulationRequest",
+          message: "presetId must be a string",
+        },
+        { status: 400 },
+      );
+    }
     const validIds = new Set(listTrajectoryPresets().map((p) => p.id));
     if (!validIds.has(body.presetId as TrajectoryPresetId)) {
       return Response.json(
@@ -59,9 +68,27 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  if (Array.isArray(body.schedule) && body.schedule.length > 0) {
+  if (
+    Array.isArray(body.schedule) &&
+    body.schedule.length > 0 &&
+    body.schedule.length <= 14
+  ) {
     const validTiers = new Set(["SUBSIDIZED", "BALANCED", "SURGE"]);
     const validZones = new Set(["SOLAR_ARRAY", "HABITAT_DOME"]);
+    const validTokenIds = new Set([
+      "gen-solar-1",
+      "bat-alpha-1",
+      "bat-beta-2",
+      "o2-scrubber-1",
+    ]);
+    const validAccountPattern = /^[a-z0-9._-]+$/i;
+    const forbiddenAccountIds = new Set([
+      "__proto__",
+      "constructor",
+      "prototype",
+      "toString",
+      "valueOf",
+    ]);
     const schedule: TurnPolicyStep[] = [];
 
     for (const rawStep of body.schedule) {
@@ -95,15 +122,44 @@ export async function POST(request: Request): Promise<Response> {
           { status: 400 },
         );
       }
+
+      const hasTokenId = s.transferTokenId !== undefined && s.transferTokenId !== null;
+      const hasToOwner = s.transferToOwnerId !== undefined && s.transferToOwnerId !== null;
+      if (hasTokenId !== hasToOwner) {
+        return Response.json(
+          {
+            error: "InvalidSimulationRequest",
+            message: "transferTokenId and transferToOwnerId must be provided together",
+          },
+          { status: 400 },
+        );
+      }
+      if (hasTokenId) {
+        if (
+          typeof s.transferTokenId !== "string" ||
+          !validTokenIds.has(s.transferTokenId) ||
+          typeof s.transferToOwnerId !== "string" ||
+          s.transferToOwnerId.length === 0 ||
+          !validAccountPattern.test(s.transferToOwnerId) ||
+          forbiddenAccountIds.has(s.transferToOwnerId)
+        ) {
+          return Response.json(
+            {
+              error: "InvalidSimulationRequest",
+              message: "Invalid transferTokenId or transferToOwnerId in schedule step",
+            },
+            { status: 400 },
+          );
+        }
+      }
+
       schedule.push({
         gridPriceTier: s.gridPriceTier as TurnPolicyStep["gridPriceTier"],
         maintenanceReserveBps: s.maintenanceReserveBps,
         batAlphaZone: s.batAlphaZone as TurnPolicyStep["batAlphaZone"],
         batBetaZone: s.batBetaZone as TurnPolicyStep["batBetaZone"],
-        transferTokenId:
-          typeof s.transferTokenId === "string" ? s.transferTokenId : null,
-        transferToOwnerId:
-          typeof s.transferToOwnerId === "string" ? s.transferToOwnerId : null,
+        transferTokenId: hasTokenId ? (s.transferTokenId as string) : null,
+        transferToOwnerId: hasToOwner ? (s.transferToOwnerId as string) : null,
       });
     }
 

@@ -47,6 +47,6 @@ export function buildCollapseAutopsy(finalState: Readonly<StationState>): Collap
     failureTurn: finalState.turn,
     rootCause: "UNMAINTAINED_CAPACITY_DECAY",
     remediationHint:
-      "0% Skim maintenance starved equipment reserves until wear exceeded 6000 bps. Fix: Enable 20% Standard (2000 bps) or 40% Fortify (4000 bps) reserve retention.",
+      "0% Skim maintenance starved equipment reserves until wear decayed effective capacity below the 50 kWh Eclipse load. Fix: Enable 20% Standard (2000 bps) or 40% Fortify (4000 bps) reserve retention.",
   };
 }

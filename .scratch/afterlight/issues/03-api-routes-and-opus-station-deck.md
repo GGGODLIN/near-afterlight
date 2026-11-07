@@ -54,4 +54,34 @@
   - Post-cut checks: `npm test` 14/14, `tsc --noEmit` clean, react-doctor `No issues found!`, `next build` EXIT 0 with the same 2 baseline warnings, isolated-browser probe (audio 1 context / 4 oscillators / 2 noise sources, inspector `position: static` below the Advance button, play → seek → restart, no console errors).
 - 2026-11-08 Main asked (main's judgment, not a user quote) to stop the inspector toggle from covering the console's Advance button; the inspector is now an in-flow panel at the page bottom (commit `89bbf46`), and all three receipts were re-shot after it.
 - 2026-11-08 Criterion 3.4 verified on the production build (`next start -p 3100`): `npm test` 14/14 PASS, `npm run verify:judge` PASS (158 ms), `next build` EXIT 0 (2 pre-existing warnings), react-doctor `--no-score --no-supply-chain` 0 errors / 0 warnings, LCU receipts `01-station-deck-daylight-and-survived.jpg`, `02-station-deck-blackout-autopsy.jpg`, `03-judge-onchain-inspector-drawer.jpg` (1252 px wide; Chrome's CDP 2× capture was unavailable in this tab) plus `curl-verify.json` and `curl-simulate-02-corridor-bottleneck.json` in the main checkout's untracked `.scratch/afterlight/dispatch/receipts/`. Commits: `d38db0f` (deck), `89bbf46` (YAGNI cuts + inspector flow).
+- 2026-11-08 Step 3.3 Verification Recipes & State/Concurrency Full Verification (`4a`):
+  - **狀態與併發兩層核驗（完整版 `4a`）**：
+    ```mermaid
+    stateDiagram-v2
+      [*] --> ACTIVE : createInitialStationState (turn = 0, O2 = 100%, total = 10000 CR)
+      ACTIVE --> ACTIVE : SetPolicy / RouteBattery / TransferEquipmentNft (P3) / RepairEquipment
+      ACTIVE --> ACTIVE : AdvanceTurn (turn < 14 && solvent && unmetLoad == 0 && maxWear < 6000)
+      ACTIVE --> SURVIVED : AdvanceTurn (turn == 14 && solvent && unmetLoad == 0 && maxWear < 6000)
+      ACTIVE --> BLACKOUT_SOLVENCY : AdvanceTurn (!scrubberSolvent -> SCRUBBER_SOLVENCY_COLLAPSE)
+      ACTIVE --> BLACKOUT_DECAY : AdvanceTurn (maxWear >= 6000 || (unmetLoad > 0 && corridorClamped == 0 && maxWear > 0) -> UNMAINTAINED_CAPACITY_DECAY)
+      ACTIVE --> BLACKOUT_CORRIDOR : AdvanceTurn (unmetLoad > 0 && corridorClamped > 0 -> CORRIDOR_BOTTLENECK_BLACKOUT)
+      BLACKOUT_SOLVENCY --> BLACKOUT_SOLVENCY : Any Action -> TerminalBlackoutImmutable (P4)
+      BLACKOUT_DECAY --> BLACKOUT_DECAY : Any Action -> TerminalBlackoutImmutable (P4)
+      BLACKOUT_CORRIDOR --> BLACKOUT_CORRIDOR : Any Action -> TerminalBlackoutImmutable (P4)
+    ```
+    - **宣稱邊界**：`P1..P4` 不變量在 14 回合軌道序列、`numRuns = 200`（`seed = 20261108`，共執行逾 `11,200` 個單步轉移）與 4 件 `NEP-171` 設備模型界限內成立（達上限 200 組隨機序列抽樣加上 4 組 Role 3 獨立突變反例重播校準，非無限狀態空間完整窮舉）。
+  - **效能宣稱核驗（Ticket 02.4 `< 3 seconds`）**：`npm run verify:judge` 在正式 CLI 入口下耗時 `154ms..158ms`（遠低於 `3000ms` 門檻），計時區間內實際完成 9/9 Rust 合約原語檢查、3/3 Golden Vectors 對照、200-run `fc.check()`（見證計數 `102 / 985 / 762 / 751 / 181`）、4/4 `NEP-366` 案例與 3/3 7 日軌跡動態模擬，0 報錯。
+- 2026-11-08 Step 3.4 & 3.5 Closeout Code Review (`typescript-reviewer` 20/20 files, `code-reviewer` 7/7 files, `security-reviewer` 5/5 files) & `receiving-code-review` verdicts:
+  - Fixed (`Acceptance-miss` — Ticket 01.2): `src/engine/afterlight-engine.ts` and `contracts/afterlight/src/lib.rs` now classify `unmetLoadKwh > 0 && corridorClampedKwh === 0 && maxWear > 0` as `UNMAINTAINED_CAPACITY_DECAY` so `0% Skim` maintenance decay is no longer misclassified as `CORRIDOR_BOTTLENECK_BLACKOUT`.
+  - Fixed (`Acceptance-miss` — Ticket 01.1): `contracts/afterlight/src/lib.rs` `AfterlightContract::new()` seeds all 4 `NEP-171` equipment units and initial account balances from `create_initial_pure_state`, adds `set_policy`, wires `advance_turn` through `step_pure_turn`, and checks `env::predecessor_account_id() == sender_id` in `execute_nep366_delegate`.
+  - Fixed (`Acceptance-miss` — Ticket 01.5): `src/engine/nep366-session-guard.ts` binds `envelope.methodName` to `action.kind` via `DELEGATE_METHOD_TO_ACTION_KIND` and checks `Number.isSafeInteger` on `attachedDepositYocto`, `currentBlockHeight`, `maxBlockHeight`, `nonce`, and `lastNonce`.
+  - Fixed (`Acceptance-miss` / `Failure-miss: F2` — Ticket 01.4 & 03.1): `src/engine/afterlight-engine.ts` isolates `GRID_PRICE_TIERS`, `state.equipment`, and `next.accountCredits` with `Object.hasOwn` and `isValidAccountId`; `app/api/simulate/route.ts` validates `presetId` type, `schedule.length <= 14`, and `transferTokenId` / `transferToOwnerId`.
+  - Fixed (`Acceptance-miss` / `Failure-miss: F5` — Ticket 02.3): `src/verifier/judge-audit-runner.ts` includes `ledgerDiff` on `FirstDivergenceDiagnostic`, shares `buildCandidateStepActions` between `prop` and counterexample replay, and verifies `expectedColonistCredits` / `expectedTreasuryCredits` on golden vectors.
+  - Fixed (`Acceptance-miss` — Ticket 03.5): `README.zh-TW.md` adds the 4 NEAR primitives section (including `NEP-141`) and Step 3 (`npm run dev`), matching `README.md`.
+  - Fixed (`Failure-miss: F4` — Ticket 03.3): `src/verifier/judge-audit-runner.ts` outputs repo-relative `contractPath` (`"contracts/afterlight/src/lib.rs"`) instead of exposing the host's absolute filesystem path.
+  - Recorded as Known Limitations under `final-gate-materiality.md` (`M2`): `app/deck-session.ts` `isJudgeReport` top-level narrowing and `fetch` without timeout on same-origin `/api/simulate` & `/api/verify`, and `app/use-command-deck.ts` `onReplayTick` non-functional state update during simultaneous sub-millisecond preset switch.
+  - **程式碼品質簡單版（Step 3.4）**：
+    - `uvx lizard --csv`：複雜度 $\ge 10$ 的函式為 `applyStationAction`（CCN 56，6 步確定性回合管線，拆碎會破壞與 Rust `step_pure_turn` 的步驟對位，保留）、`runJudgeAudit`（CCN 62，單一驗收報表組裝器，保留）、`evaluateAfterlightOracleStep`（CCN 45，$O(M)$ 四項不變量獨立檢查器，保留）、`step_pure_turn`（CCN 29，Rust 6 步算帳管線，保留）、`POST` in `app/api/simulate/route.ts`（CCN 28，輸入邊界推進驗證，保留）、`simulateOrbitWeek`（CCN 19，保留）。
+    - `jscpd` 結構重複檢查：`app/` 與 `src/` 之間 0 處新增重複（僅 `nep366-session-guard.ts` 拒絕回傳物件與 `lib.rs` 結構欄位宣告有少量樣板，皆屬清晰顯式欄位，保留）。
+
 
