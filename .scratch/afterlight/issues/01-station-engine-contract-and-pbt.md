@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** `ready-for-agent`
+**Status:** `done`
 
 **Needs:** Local Node.js (`v24+` with `--experimental-strip-types`) and Rust `cargo` (`RUSTFLAGS="--cfg clippy" cargo test`) — a worker can check every item unaided.
 
@@ -36,5 +36,7 @@
 
 - 2026-11-08 Batch testing & execution mode approved by user (`"1a, 2a, 3b, 4a, 允許這次派工"`): covering Tickets `01`, `02`, `03` with `testing_mode: tdd`, `execution_mode: Inline (01, 02, 03-API) + Opus 5.5 Max Herdr worker (03-UI)`, `best_of_n: no (3b)`, `state_verification: full PBT (4a)`.
 - 2026-11-08 Ticket 01 verified: observed RED (7/7 failing on missing implementation), implemented Rust contract (`near-sdk = "=5.29.0"`), TS engine, NEP-366 guard, and Oracle; `npm test` 7/7 PASS (`232ms`) and `RUSTFLAGS="--cfg clippy" cargo test` 1/1 PASS (`golden_turn_vectors_match_typescript_engine`).
+- 2026-11-08 Ticket 01 YAGNI review (`verdict.json`): applied cuts in commit `3b8ae14` (removed `EquipmentHandoverRecord`, `AFTERLIGHT_TRACKS`, `AfterlightTrack`, `StationZone`, `MAINTENANCE_RETENTION_TIERS`, `MaintenanceRetentionTierKey`, `REQUIRED_HABITAT_TOTAL_LOAD_KWH`, and unexported `LedgerFieldDiff`; retained `Cargo.lock` for deterministic `near-sdk = "=5.29.0"` resolution per Seat 2/4 blocker).
+
 
 
