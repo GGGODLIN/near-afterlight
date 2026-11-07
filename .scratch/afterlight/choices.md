@@ -234,3 +234,46 @@
 - 舞台 viewBox 是 1200×640。
 
 **規格霧區建議**：「範圍解讀」類有 9 條集中在介面狀態，包括開局畫面、回放模式、斷電之後能做哪些操作、存活畫面。建議回 spec 補一段「介面狀態」定義，之後不要再逐條由實作者自行判定。
+
+## Ticket 03 YAGNI 裁剪與抽屜位置 — commit 89bbf46（2026-11-08）
+
+來源：同一個 worker session，處理 `ticket-yagni-runner` 的裁決（keep 58、demote 29、kill 3），以及 main 判讀要求的抽屜位置修正（不是使用者原話）。本段沒有另外跑 auto-choice 的 self-verify 稽查。
+
+已被推翻的上一段決定，不重判，只標記現況：
+- #6：本機備援和「receipts match client engine」比對都已刪除，API 失敗時改成畫面不變（見 #23）。
+- #15：播放鍵改成只能重播，沒有暫停。
+- #21：紀錄欄位刪掉沒用到的 `relayerSignerId`、`maxBlockHeight`，12 筆上限不變。
+- 音效從 9 種減為 brief 列出的 6 種。
+
+### #22 YAGNI 裁決中 22 項有明文依據的保留不砍
+
+- **何時**：89bbf46（處置逐條記在 `.scratch/afterlight/issues/03-api-routes-and-opus-station-deck.md` 的 Verification Log）
+- **決定**：觸發：YAGNI runner 只拿票的原文判斷，沒讀到 brief，所以把 brief 和 spec 明文要求的東西歸成「模型自行推導」。現在：只砍掉純屬 worker 自己加的 10 項；有明文依據的 22 項保留，並在 Verification Log 逐條引用原文。保留的依據包括：
+  - 點回合定格、三種指定音效：brief 有寫。
+  - NEP-366 信封與越權盜轉探針：spec Story 4、Solution 3 和 brief 都有寫。
+  - 型別檢查：TypeScript 規則要求網路回應要先檢查型別。
+  - postcss 骨架：main 的 3.1 commit 建立的。
+
+  沒選的做法：照裁決全部刪除，會拿掉 brief 點名的功能。
+- **規格缺口**：票的 3.4 只有一行摘要，brief 的詳細要求沒有寫進票裡。
+- **影響範圍**：main 做 review-implement 時，可能會把這些項目再列為要刪。
+- **判定**：needs-user — 要不要照 brief 保留，是 main／使用者的範圍決定。暫定做法：保留。撤回方式：依 `verdict.json` 刪掉對應的函式和音效，再跑一次 `npm test` 和 `next build`。
+- **把握度**：中
+
+### #23 劇本載入失敗時畫面不變
+
+- **何時**：89bbf46（`app/deck-session.ts` 的 `fetchReplayRun`、`app/use-command-deck.ts` 的 `loadPreset`）
+- **決定**：觸發：YAGNI 砍掉本機備援之後，`/api/simulate` 一失敗就沒有資料可以回放。現在：膠囊的「SIMULATING…」消失，畫面停在原本的狀態，不顯示錯誤訊息。沒選的做法：另外加一個錯誤提示，那等於新增 YAGNI 剛砍掉的那類失敗處理。
+- **規格缺口**：spec 沒說劇本載入失敗時要怎麼呈現。
+- **影響範圍**：API 掛掉時，評審點劇本會像沒反應一樣。
+- **判定**：sound — 同一份 build 的同源 API 很少失敗，失敗時按 Reset 或再點一次就好。
+- **把握度**：中
+
+### #24 評審抽屜改成頁面底部的一般區塊
+
+- **何時**：89bbf46（`app/globals.css` 的 `.inspector`）
+- **決定**：觸發：main 判讀指出，固定在畫面底部的抽屜開關會蓋住右欄的「Advance 1 Orbital Turn」按鈕。現在：抽屜放在頁面最下方，展開時往下延伸，任何視窗高度都不會遮住內容。沒選的做法：保留固定位置、改放到別的角落，換個角落一樣會蓋到其他內容。
+- **規格缺口**：spec 只寫「collapsible drawer」，沒說是固定在畫面上還是跟著頁面捲動。
+- **影響範圍**：評審要捲到頁面最下方才看得到抽屜。
+- **判定**：sound — 這是 main 指定的修正方向，而且不再遮住任何操作。
+- **把握度**：高
