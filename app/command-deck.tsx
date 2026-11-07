@@ -223,7 +223,7 @@ interface OrbitTimelineProps {
   state: StationState;
   replay: ReplayView | null;
   onSeek: (turn: number) => void;
-  onPlayToggle: () => void;
+  onPlay: () => void;
 }
 
 function slotStatus(turn: number, receipts: TurnAccountingReceipt[], reached: number): string {
@@ -243,22 +243,17 @@ function playLabel(replay: ReplayView | null): string {
     return "PICK A PRESET TO FAST-FORWARD";
   }
   if (replay.playing) {
-    return "PAUSE FAST-FORWARD";
+    return "FAST-FORWARDING…";
   }
-  return replay.cursor >= replay.run.turnReceipts.length ? "REPLAY 7-DAY FAST-FORWARD" : "PLAY 7-DAY FAST-FORWARD";
+  return "PLAY 7-DAY FAST-FORWARD";
 }
 
-function OrbitTimeline({ state, replay, onSeek, onPlayToggle }: OrbitTimelineProps) {
+function OrbitTimeline({ state, replay, onSeek, onPlay }: OrbitTimelineProps) {
   const receipts = replay ? replay.run.turnReceipts : state.turnHistory;
   const reached = replay ? replay.cursor : state.turnHistory.length;
   return (
     <div className="orbit-timeline">
-      <button
-        type="button"
-        className={`play-button${replay?.playing ? " is-playing" : ""}`}
-        disabled={!replay}
-        onClick={onPlayToggle}
-      >
+      <button type="button" className="play-button" disabled={!replay || replay.playing} onClick={onPlay}>
         <span className="play-glyph" aria-hidden="true" />
         {playLabel(replay)}
       </button>
@@ -861,7 +856,7 @@ function JudgeColumn({ judge, onRunJudge }: JudgeColumnProps) {
 
 function relayEntryClass(entry: RelayEntry): string {
   const executed = entry.engineAccepted && entry.envelopeVerdict === "Valid";
-  return `relay-entry is-${entry.origin}${executed ? " is-executed" : " is-blocked"}`;
+  return `relay-entry${executed ? " is-executed" : " is-blocked"}`;
 }
 
 function oracleSummary(entry: RelayEntry): string {
@@ -966,7 +961,7 @@ function InspectorDrawer({ open, judge, relayLog, live, state, onToggle, onRunJu
         aria-controls="inspector-panel"
         onClick={onToggle}
       >
-        <span>{open ? "▾" : "▴"} Judge &amp; On-Chain Inspector</span>
+        <span>{open ? "▴" : "▾"} Judge &amp; On-Chain Inspector</span>
         <span className="inspector-chips">
           <span className={verdict ? `verdict-${verdict.toLowerCase()}` : undefined}>
             {verdict ? `judge ${verdict}` : "judge not run"}
@@ -1007,25 +1002,16 @@ export default function CommandDeck() {
         <div className="deck-primary">
           <section className="stage-panel" aria-label="Orbital station cross-section">
             <div className="stage-frame">
-              <div className="stage-canvas">
-                <StationStage
-                  state={state}
-                  receipt={receipt}
-                  sky={sky}
-                  routingEnabled={!controlsLocked}
-                  onRouteBattery={actions.route}
-                />
-                {replayRun ? (
-                  <span className={`replay-source${replayRun.source === "api" ? " is-api" : " is-local"}`}>
-                    {replayRun.source === "api"
-                      ? `POST /api/simulate · ${replayRun.matchesClientEngine ? "receipts match client engine" : "receipts differ from client engine"}`
-                      : "Local engine replay · /api/simulate unreachable"}
-                  </span>
-                ) : null}
-              </div>
+              <StationStage
+                state={state}
+                receipt={receipt}
+                sky={sky}
+                routingEnabled={!controlsLocked}
+                onRouteBattery={actions.route}
+              />
               <StageBanner state={state} receipt={receipt} />
             </div>
-            <OrbitTimeline state={state} replay={deck.replay} onSeek={actions.seek} onPlayToggle={actions.playToggle} />
+            <OrbitTimeline state={state} replay={deck.replay} onSeek={actions.seek} onPlay={actions.play} />
           </section>
           <EquipmentRack
             state={state}

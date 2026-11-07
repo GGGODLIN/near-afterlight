@@ -63,7 +63,7 @@ body {
 .deck {
   max-width: 1680px;
   margin: 0 auto;
-  padding: 18px 22px 110px;
+  padding: 18px 22px 40px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -929,10 +929,6 @@ body {
 
 /* stage overlays */
 
-.stage-canvas {
-  position: relative;
-}
-
 .stage-banner {
   display: flex;
   flex-direction: column;
@@ -1013,28 +1009,6 @@ body {
   color: #ffc6d1;
 }
 
-.replay-source {
-  position: absolute;
-  right: 14px;
-  bottom: 12px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--line);
-}
-
-.replay-source.is-api {
-  color: #bdeeff;
-}
-
-.replay-source.is-local {
-  color: var(--warn);
-  border-color: rgba(255, 176, 32, 0.5);
-}
-
 /* ---------- timeline ---------- */
 
 .orbit-timeline {
@@ -1074,14 +1048,6 @@ body {
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
   border-left: 10px solid currentColor;
-}
-
-.play-button.is-playing .play-glyph {
-  width: 10px;
-  height: 12px;
-  border: 0;
-  border-left: 3px solid currentColor;
-  border-right: 3px solid currentColor;
 }
 
 .turn-slots {
@@ -1828,35 +1794,33 @@ body {
 
 /* ---------- inspector drawer ---------- */
 
+/* In page flow on purpose: a fixed bottom bar sat on top of the console's Advance button at common viewport heights. */
 .inspector {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 30;
   display: flex;
   flex-direction: column;
-  pointer-events: none;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
 }
 
 .inspector-toggle {
-  align-self: flex-end;
-  margin-right: 22px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 9px 14px;
-  border-radius: 14px 14px 0 0;
-  border: 1px solid var(--line-strong);
-  border-bottom: 0;
-  background: rgba(10, 16, 34, 0.97);
+  padding: 14px 18px;
+  border: 0;
+  background: transparent;
   color: var(--text);
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   cursor: pointer;
-  pointer-events: auto;
-  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.inspector-toggle:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .inspector-chips {
@@ -1889,14 +1853,10 @@ body {
   display: grid;
   grid-template-columns: 1.15fr 1fr 1fr;
   gap: 18px;
-  max-height: 62vh;
-  overflow: auto;
-  padding: 16px 22px 22px;
-  border-top: 1px solid var(--line-strong);
+  padding: 16px 18px 20px;
+  border-top: 1px solid var(--line);
   background: #070b18;
-  box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.5);
-  pointer-events: auto;
-  animation: drawer-up 0.35s ease both;
+  animation: drawer-up 0.3s ease both;
 }
 
 .inspector-panel[hidden] {
@@ -2028,10 +1988,6 @@ body {
 
 .relay-entry.is-blocked {
   border-left-color: var(--alert);
-}
-
-.relay-entry.is-exploit-probe {
-  background: rgba(255, 59, 92, 0.07);
 }
 
 .relay-head {
@@ -2324,7 +2280,7 @@ body {
 
 @keyframes drawer-up {
   from {
-    transform: translateY(24px);
+    transform: translateY(-8px);
   }
   to {
     transform: none;

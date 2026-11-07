@@ -16,12 +16,12 @@ import {
   isJudgeReport,
   lockReasonFor,
   REPLAY_STEP_MS,
+  restartReplay,
   runExploitProbes,
   seekReplay,
   skyOf,
   startReplay,
   stepReplay,
-  toggleReplay,
   type CommandOutcome,
   type DeckState,
   type JudgeRun,
@@ -79,7 +79,7 @@ export interface CommandDeckActions {
   exploit: (tokenId: string) => void;
   reset: () => void;
   preset: (card: PresetCard) => void;
-  playToggle: () => void;
+  play: () => void;
   seek: (turn: number) => void;
   toggleSound: () => void;
   toggleDrawer: () => void;
@@ -121,7 +121,6 @@ export function useCommandDeck(): CommandDeckModel {
     const next = stepReplay(replay);
     setDeck({ ...deck, replay: next });
     if (next.playing) {
-      cue("replay-tick");
       return;
     }
     const finalStatus = next.run.turnSnapshots.at(-1)?.stationStatus;
@@ -156,7 +155,9 @@ export function useCommandDeck(): CommandDeckModel {
       "set_policy",
       `Grid price tier → ${nextTier}`,
     );
-    cue(outcome.accepted ? "detent" : "access-denied");
+    if (outcome.accepted) {
+      cue("detent");
+    }
   };
 
   const reserve = (bps: number) => {
@@ -173,7 +174,9 @@ export function useCommandDeck(): CommandDeckModel {
       "set_policy",
       `Maintenance reserve → ${bps} bps`,
     );
-    cue(outcome.accepted ? "detent" : "access-denied");
+    if (outcome.accepted) {
+      cue("detent");
+    }
   };
 
   const route = (tokenId: string) => {
@@ -187,7 +190,9 @@ export function useCommandDeck(): CommandDeckModel {
       "route_battery",
       `Route ${tokenId} → ${targetZone}`,
     );
-    cue(outcome.accepted ? "latch" : "access-denied");
+    if (outcome.accepted) {
+      cue("latch");
+    }
   };
 
   const advance = () => {
@@ -200,7 +205,6 @@ export function useCommandDeck(): CommandDeckModel {
       `Advance to turn ${deck.live.state.turn + 1}`,
     );
     if (!outcome.accepted) {
-      cue("access-denied");
       return;
     }
     cue(outcome.receipt?.orbitalPhase === "ECLIPSE" ? "surge-eclipse" : "surge-daylight");
@@ -218,12 +222,14 @@ export function useCommandDeck(): CommandDeckModel {
       return;
     }
     setDeck(outcome.deck);
-    cue(outcome.accepted ? "handover-chime" : "access-denied");
+    if (outcome.accepted) {
+      cue("detent");
+    }
   };
 
   const exploit = (tokenId: string) => {
     setDeck(runExploitProbes(deck, frame.state, tokenId));
-    cue("access-denied");
+    cue("detent");
   };
 
   const reset = () => {
@@ -243,15 +249,18 @@ export function useCommandDeck(): CommandDeckModel {
       return;
     }
     setPendingPresetId(null);
+    if (!run) {
+      return;
+    }
     setDeck((current) => startReplay(current, run));
     cue("surge-daylight");
   };
 
-  const playToggle = () => {
-    if (!deck.replay) {
+  const play = () => {
+    if (!deck.replay || deck.replay.playing) {
       return;
     }
-    setDeck({ ...deck, replay: toggleReplay(deck.replay) });
+    setDeck({ ...deck, replay: restartReplay(deck.replay) });
     cue("detent");
   };
 
@@ -260,7 +269,7 @@ export function useCommandDeck(): CommandDeckModel {
       return;
     }
     setDeck({ ...deck, replay: seekReplay(deck.replay, turn) });
-    cue("replay-tick");
+    cue("detent");
   };
 
   const toggleSound = () => {
@@ -278,23 +287,22 @@ export function useCommandDeck(): CommandDeckModel {
       const response = await fetch("/api/verify");
       if (!response.ok) {
         setJudge({ status: "error", message: `GET /api/verify returned HTTP ${response.status}` });
-        cue("access-denied");
         return;
       }
       const payload: unknown = await response.json();
       if (!isJudgeReport(payload)) {
         setJudge({ status: "error", message: "GET /api/verify returned an unexpected payload" });
-        cue("access-denied");
         return;
       }
       setJudge({ status: "done", report: payload });
-      cue(payload.verdict === "PASS" ? "survival-chord" : "access-denied");
+      if (payload.verdict === "PASS") {
+        cue("survival-chord");
+      }
     } catch (error: unknown) {
       setJudge({
         status: "error",
         message: error instanceof Error ? error.message : "GET /api/verify failed",
       });
-      cue("access-denied");
     }
   };
 
@@ -317,7 +325,7 @@ export function useCommandDeck(): CommandDeckModel {
       exploit,
       reset,
       preset: (card) => void loadPreset(card),
-      playToggle,
+      play,
       seek,
       toggleSound,
       toggleDrawer: () => setDrawerOpen((open) => !open),

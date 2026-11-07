@@ -4,10 +4,7 @@ export type TacticalCue =
   | "surge-daylight"
   | "surge-eclipse"
   | "blackout-alarm"
-  | "survival-chord"
-  | "access-denied"
-  | "handover-chime"
-  | "replay-tick";
+  | "survival-chord";
 
 interface ToneSpec {
   type: OscillatorType;
@@ -28,7 +25,6 @@ interface NoiseSpec {
 }
 
 const SILENCE = 0.0001;
-const noiseBuffers = new WeakMap<BaseAudioContext, AudioBuffer>();
 
 function shapeGain(gain: GainNode, at: number, attack: number, peak: number, release: number): void {
   gain.gain.setValueAtTime(SILENCE, at);
@@ -63,16 +59,11 @@ function playTone(ctx: BaseAudioContext, out: AudioNode, t0: number, spec: ToneS
 }
 
 function whiteNoise(ctx: BaseAudioContext): AudioBuffer {
-  const cached = noiseBuffers.get(ctx);
-  if (cached) {
-    return cached;
-  }
   const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.5), ctx.sampleRate);
   const channel = buffer.getChannelData(0);
   for (let i = 0; i < channel.length; i += 1) {
     channel[i] = Math.random() * 2 - 1;
   }
-  noiseBuffers.set(ctx, buffer);
   return buffer;
 }
 
@@ -160,31 +151,6 @@ function survivalChord(ctx: BaseAudioContext, out: AudioNode, t0: number): void 
   }
 }
 
-function accessDenied(ctx: BaseAudioContext, out: AudioNode, t0: number): void {
-  for (const start of [0, 0.17]) {
-    playTone(ctx, out, t0, {
-      type: "square",
-      from: 320,
-      to: 180,
-      start,
-      attack: 0.008,
-      peak: 0.09,
-      release: 0.12,
-      filter: { type: "lowpass", from: 1600, to: 900, q: 1 },
-    });
-  }
-}
-
-function handoverChime(ctx: BaseAudioContext, out: AudioNode, t0: number): void {
-  playTone(ctx, out, t0, { type: "sine", from: 660, to: 660, start: 0, attack: 0.01, peak: 0.12, release: 0.45 });
-  playTone(ctx, out, t0, { type: "sine", from: 990, to: 990, start: 0.12, attack: 0.01, peak: 0.11, release: 0.6 });
-  playTone(ctx, out, t0, { type: "triangle", from: 1980, to: 1980, start: 0.12, attack: 0.01, peak: 0.025, release: 0.5 });
-}
-
-function replayTick(ctx: BaseAudioContext, out: AudioNode, t0: number): void {
-  playTone(ctx, out, t0, { type: "sine", from: 1500, to: 1300, start: 0, attack: 0.002, peak: 0.045, release: 0.05 });
-}
-
 const CUE_PLAYERS: Record<TacticalCue, (ctx: BaseAudioContext, out: AudioNode, t0: number) => void> = {
   detent,
   latch,
@@ -192,9 +158,6 @@ const CUE_PLAYERS: Record<TacticalCue, (ctx: BaseAudioContext, out: AudioNode, t
   "surge-eclipse": surgeEclipse,
   "blackout-alarm": blackoutAlarm,
   "survival-chord": survivalChord,
-  "access-denied": accessDenied,
-  "handover-chime": handoverChime,
-  "replay-tick": replayTick,
 };
 
 export function playTacticalCue(

@@ -66,17 +66,12 @@ export const ORBIT_CALENDAR: OrbitalPhase[] = (
   PRESET_CARDS.find((card) => card.survived)?.clientRun.turnReceipts ?? []
 ).map((receipt) => receipt.orbitalPhase);
 
-type RelayOrigin = "commander" | "exploit-probe";
-
 export interface RelayEntry {
   id: number;
   label: string;
-  origin: RelayOrigin;
   methodName: string;
   senderId: string;
-  relayerSignerId: string;
   nonce: number;
-  maxBlockHeight: number;
   envelopeVerdict: Nep366EnvelopeRejection;
   effectivePredecessorId: string;
   engineAccepted: boolean;
@@ -96,8 +91,6 @@ export interface ReplayRun {
   initialState: StationState;
   turnSnapshots: StationState[];
   turnReceipts: TurnAccountingReceipt[];
-  source: "api" | "local-engine";
-  matchesClientEngine: boolean;
 }
 
 export interface ReplayView {
@@ -207,7 +200,7 @@ function relayThroughSession(
   state: StationState,
   envelope: Nep366DelegateEnvelope,
   action: StationAction,
-  meta: { id: number; label: string; origin: RelayOrigin },
+  meta: { id: number; label: string },
 ): SessionRelay {
   const trace = verifyAndExecuteNep366Delegate(envelope, action, state);
   const executedAction: StationAction = {
@@ -225,9 +218,7 @@ function relayThroughSession(
       ...meta,
       methodName: envelope.methodName,
       senderId: envelope.senderId,
-      relayerSignerId: envelope.relayerSignerId,
       nonce: envelope.nonce,
-      maxBlockHeight: envelope.maxBlockHeight,
       envelopeVerdict: trace.envelopeVerdict,
       effectivePredecessorId: trace.executionVerdict.effectivePredecessorId,
       engineAccepted: trace.executionVerdict.engineAccepted,
@@ -263,7 +254,7 @@ function relayCommand(
     deck.live.state,
     signEnvelope(action.actorId, methodName, nonce, blockHeight),
     action,
-    { id: deck.relaySeq + 1, label, origin: "commander" },
+    { id: deck.relaySeq + 1, label },
   );
   return {
     deck: {
@@ -346,13 +337,13 @@ export function runExploitProbes(deck: DeckState, state: StationState, tokenId: 
     state,
     signEnvelope(target.ownerId, "nft_transfer", 1, blockHeight),
     { kind: "TransferEquipmentNft", actorId: target.ownerId, tokenId, toOwnerId: WASH_SYBIL_ID },
-    { id: deck.relaySeq + 1, label: `Wash-wear probe · ${tokenId} → sybil`, origin: "exploit-probe" },
+    { id: deck.relaySeq + 1, label: `Wash-wear probe · ${tokenId} → sybil` },
   );
   const siphon = relayThroughSession(
     state,
     signEnvelope(SESSION_RELAYER_ID, "nft_transfer", 1, blockHeight),
     { kind: "TransferEquipmentNft", actorId: target.ownerId, tokenId, toOwnerId: SESSION_RELAYER_ID },
-    { id: deck.relaySeq + 2, label: `Siphon probe · relayer → ${tokenId}`, origin: "exploit-probe" },
+    { id: deck.relaySeq + 2, label: `Siphon probe · relayer → ${tokenId}` },
   );
   return {
     ...deck,
@@ -380,9 +371,8 @@ export function stepReplay(replay: ReplayView): ReplayView {
   return { ...replay, cursor, playing: cursor < total };
 }
 
-export function toggleReplay(replay: ReplayView): ReplayView {
-  const atEnd = replay.cursor >= replay.run.turnReceipts.length;
-  return { ...replay, cursor: atEnd ? 0 : replay.cursor, playing: atEnd || !replay.playing };
+export function restartReplay(replay: ReplayView): ReplayView {
+  return { ...replay, cursor: 0, playing: true };
 }
 
 export function seekReplay(replay: ReplayView, turn: number): ReplayView {
@@ -454,19 +444,7 @@ export function isJudgeReport(value: unknown): value is JudgeVerificationReport 
   );
 }
 
-function localReplayRun(card: PresetCard): ReplayRun {
-  return {
-    presetId: card.id,
-    title: card.name,
-    initialState: card.clientRun.initialState,
-    turnSnapshots: card.clientRun.turnSnapshots,
-    turnReceipts: card.clientRun.turnReceipts,
-    source: "local-engine",
-    matchesClientEngine: true,
-  };
-}
-
-export async function fetchReplayRun(card: PresetCard): Promise<ReplayRun> {
+export async function fetchReplayRun(card: PresetCard): Promise<ReplayRun | null> {
   try {
     const response = await fetch("/api/simulate", {
       method: "POST",
@@ -474,11 +452,11 @@ export async function fetchReplayRun(card: PresetCard): Promise<ReplayRun> {
       body: JSON.stringify({ presetId: card.id }),
     });
     if (!response.ok) {
-      return localReplayRun(card);
+      return null;
     }
     const payload: unknown = await response.json();
     if (!isSimulationPayload(payload)) {
-      return localReplayRun(card);
+      return null;
     }
     return {
       presetId: card.id,
@@ -486,12 +464,8 @@ export async function fetchReplayRun(card: PresetCard): Promise<ReplayRun> {
       initialState: payload.initialState,
       turnSnapshots: payload.turnSnapshots,
       turnReceipts: payload.turnReceipts,
-      source: "api",
-      matchesClientEngine:
-        JSON.stringify(payload.turnReceipts) === JSON.stringify(card.clientRun.turnReceipts),
     };
   } catch {
-    // Network errors, non-OK responses, and malformed payloads fall back to the same engine in-browser so a preset never dead-ends; a request that never settles is not covered.
-    return localReplayRun(card);
+    return null;
   }
 }
