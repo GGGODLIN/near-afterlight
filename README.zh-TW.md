@@ -12,6 +12,10 @@
 > 1. **[GhostShift](https://github.com/GGGODLIN/near-ghost-shift)** — 單調代次柵欄（Monotonic Epoch Fencing）與 `Yield & Resume` 任務交接審計台（賽道：`security`, `swarms`, `agents`, `business`, `open`, `privacy`）。
 > 2. **Afterlight**（本儲存庫）— 太空站長夜電網調度與 `NEP-171` 動態磨損設備 NFT 策略生存遊戲（賽道：`games`, `nfts`）。
 
+https://github.com/user-attachments/assets/17458f9b-6380-4bfa-a8e4-e19b7a73ef0a
+
+![Afterlight — The 45 kWh Chokepoint（45 秒短片分鏡拼板）](/docs/assets/stills.png)
+
 ![Afterlight — 太空站三區橫切面戰術指揮艙（14/14 存活破曉）](/docs/assets/01-station-deck-daylight-and-survived.jpg)
 
 ![Afterlight — 第 2 回合輸電走廊 45 kWh 夾斷與單一死因解剖報告](/docs/assets/02-station-deck-blackout-autopsy.jpg)

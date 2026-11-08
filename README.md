@@ -12,6 +12,10 @@ Built for **NEAR Hackathon 2026** (`https://nearhackathon.com/`).
 > 1. **[GhostShift](https://github.com/GGGODLIN/near-ghost-shift)** — Monotonic Epoch Fencing & Yield-Resume Handoff Gate (`tracks`: `security`, `swarms`, `agents`, `business`, `open`, `privacy`).
 > 2. **Afterlight** (this repository) — Orbital Station Power-Grid & Dynamic `NEP-171` Equipment NFT Survival Game (`tracks`: `games`, `nfts`).
 
+https://github.com/user-attachments/assets/17458f9b-6380-4bfa-a8e4-e19b7a73ef0a
+
+![Afterlight — The 45 kWh Chokepoint (45s Film Storyboard)](/docs/assets/stills.png)
+
 ![Afterlight — Orbital Station Cross-Section Command Deck (14/14 Survived)](/docs/assets/01-station-deck-daylight-and-survived.jpg)
 
 ![Afterlight — Turn 2 Corridor Bottleneck Blackout & Single Root-Cause Autopsy](/docs/assets/02-station-deck-blackout-autopsy.jpg)
