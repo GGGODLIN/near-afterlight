@@ -83,5 +83,8 @@
   - **程式碼品質簡單版（Step 3.4）**：
     - `uvx lizard --csv`：複雜度 $\ge 10$ 的函式為 `applyStationAction`（CCN 56，6 步確定性回合管線，拆碎會破壞與 Rust `step_pure_turn` 的步驟對位，保留）、`runJudgeAudit`（CCN 62，單一驗收報表組裝器，保留）、`evaluateAfterlightOracleStep`（CCN 45，$O(M)$ 四項不變量獨立檢查器，保留）、`step_pure_turn`（CCN 29，Rust 6 步算帳管線，保留）、`POST` in `app/api/simulate/route.ts`（CCN 28，輸入邊界推進驗證，保留）、`simulateOrbitWeek`（CCN 19，保留）。
     - `jscpd` 結構重複檢查：`app/` 與 `src/` 之間 0 處新增重複（僅 `nep366-session-guard.ts` 拒絕回傳物件與 `lib.rs` 結構欄位宣告有少量樣板，皆屬清晰顯式欄位，保留）。
+- 2026-11-08 Step 3.8 Architecture visual candidate gate: `waived`（human decision: `"1b, 2b, 3a"` — 這次不用；reason: `README.md`、`README.zh-TW.md` 與上方 Verification Log 已內建三區電網拓樸與完整 Mermaid 狀態機圖；`feature_base_sha`: `84ead9647e403f03f4cac4211d9710faac06979b`；`head_sha`: `4018080bd43fca5b43948d45df78a8be9584f8de`）。
+- 2026-11-08 Step 3.4 `/deep-check` decision: `declined`（human decision: `"2b"` — 不用跑 `/deep-check`）。
+
 
 
