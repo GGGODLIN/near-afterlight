@@ -6,6 +6,7 @@ Built for **NEAR Hackathon 2026** (`https://nearhackathon.com/`).
 
 - **Live Interactive Command Deck**: [https://near-afterlight.vercel.app](https://near-afterlight.vercel.app)
 - **Public GitHub Repository**: [https://github.com/GGGODLIN/near-afterlight](https://github.com/GGGODLIN/near-afterlight)
+- **X (Twitter) Demo Post**: [https://x.com/GGGODLIN/status/2119268196062798316](https://x.com/GGGODLIN/status/2119268196062798316)
 - **Tracks**: `games` (Games With Real Economies), `nfts` (NFTs That Do Something)
 
 > **Independent Submission Disclosure (`Q-015`)**: Per NEAR Hackathon Rule `Q-015` (*"Allowed if projects are independent and disclosed: each README names the other project"*), this participant submitted two completely independent entries with zero overlapping tracks and zero shared domain logic:

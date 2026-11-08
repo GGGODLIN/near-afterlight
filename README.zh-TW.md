@@ -6,6 +6,7 @@
 
 - **線上互動戰術指揮艙**：[https://near-afterlight.vercel.app](https://near-afterlight.vercel.app)
 - **公開 GitHub 儲存庫**：[https://github.com/GGGODLIN/near-afterlight](https://github.com/GGGODLIN/near-afterlight)
+- **X（Twitter）演示貼文**：[https://x.com/GGGODLIN/status/2119268196062798316](https://x.com/GGGODLIN/status/2119268196062798316)
 - **參賽賽道（Tracks）**：`games`（Games With Real Economies）、`nfts`（NFTs That Do Something）
 
 > **雙案獨立揭露聲明（規則 `Q-015`）**：依 NEAR Hackathon 官方規則 `Q-015`（*"Allowed if projects are independent and disclosed: each README names the other project"*），本參賽者提交之兩個專案在賽道、問題空間與程式碼上 100% 獨立且零重疊：
