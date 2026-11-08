@@ -4,12 +4,19 @@
 
 Built for **NEAR Hackathon 2026** (`https://nearhackathon.com/`).
 
+- **Live Interactive Command Deck**: [https://near-afterlight.vercel.app](https://near-afterlight.vercel.app)
+- **Public GitHub Repository**: [https://github.com/GGGODLIN/near-afterlight](https://github.com/GGGODLIN/near-afterlight)
 - **Tracks**: `games` (Games With Real Economies), `nfts` (NFTs That Do Something)
-- **Public GitHub Repository**: `https://github.com/GGGODLIN/near-afterlight`
 
 > **Independent Submission Disclosure (`Q-015`)**: Per NEAR Hackathon Rule `Q-015` (*"Allowed if projects are independent and disclosed: each README names the other project"*), this participant submitted two completely independent entries with zero overlapping tracks and zero shared domain logic:
 > 1. **[GhostShift](https://github.com/GGGODLIN/near-ghost-shift)** — Monotonic Epoch Fencing & Yield-Resume Handoff Gate (`tracks`: `security`, `swarms`, `agents`, `business`, `open`, `privacy`).
 > 2. **Afterlight** (this repository) — Orbital Station Power-Grid & Dynamic `NEP-171` Equipment NFT Survival Game (`tracks`: `games`, `nfts`).
+
+![Afterlight — Orbital Station Cross-Section Command Deck (14/14 Survived)](/docs/assets/01-station-deck-daylight-and-survived.jpg)
+
+![Afterlight — Turn 2 Corridor Bottleneck Blackout & Single Root-Cause Autopsy](/docs/assets/02-station-deck-blackout-autopsy.jpg)
+
+![Afterlight — Collapsible Judge & On-Chain Inspector Drawer](/docs/assets/03-judge-onchain-inspector-drawer.jpg)
 
 ---
 

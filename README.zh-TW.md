@@ -4,12 +4,19 @@
 
 為 **NEAR Hackathon 2026**（`https://nearhackathon.com/`）打造。
 
+- **線上互動戰術指揮艙**：[https://near-afterlight.vercel.app](https://near-afterlight.vercel.app)
+- **公開 GitHub 儲存庫**：[https://github.com/GGGODLIN/near-afterlight](https://github.com/GGGODLIN/near-afterlight)
 - **參賽賽道（Tracks）**：`games`（Games With Real Economies）、`nfts`（NFTs That Do Something）
-- **公開 GitHub 儲存庫**：`https://github.com/GGGODLIN/near-afterlight`
 
 > **雙案獨立揭露聲明（規則 `Q-015`）**：依 NEAR Hackathon 官方規則 `Q-015`（*"Allowed if projects are independent and disclosed: each README names the other project"*），本參賽者提交之兩個專案在賽道、問題空間與程式碼上 100% 獨立且零重疊：
 > 1. **[GhostShift](https://github.com/GGGODLIN/near-ghost-shift)** — 單調代次柵欄（Monotonic Epoch Fencing）與 `Yield & Resume` 任務交接審計台（賽道：`security`, `swarms`, `agents`, `business`, `open`, `privacy`）。
 > 2. **Afterlight**（本儲存庫）— 太空站長夜電網調度與 `NEP-171` 動態磨損設備 NFT 策略生存遊戲（賽道：`games`, `nfts`）。
+
+![Afterlight — 太空站三區橫切面戰術指揮艙（14/14 存活破曉）](/docs/assets/01-station-deck-daylight-and-survived.jpg)
+
+![Afterlight — 第 2 回合輸電走廊 45 kWh 夾斷與單一死因解剖報告](/docs/assets/02-station-deck-blackout-autopsy.jpg)
+
+![Afterlight — 底部評審與鏈上檢視抽屜（NEP-366 攔截收據與 NEP-171 狀態表）](/docs/assets/03-judge-onchain-inspector-drawer.jpg)
 
 ---
 
