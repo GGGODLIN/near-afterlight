@@ -210,7 +210,7 @@ function StageBanner({ state, receipt }: StageBannerProps) {
       {receipt ? (
         <div className="banner-telemetry">
           <span>{`Unmet load ${receipt.unmetLoadKwh} kWh`}</span>
-          <span>{`Corridor ${receipt.corridorFlowKwh}/${state.corridorCapKwh} kWh · clamped ${receipt.corridorClampedKwh}`}</span>
+          <span>{`Corridor ${receipt.corridorFlowKwh}/${state.corridorCapKwh} kWh · attempted clamp ${receipt.corridorClampedKwh} kWh`}</span>
           <span>{`Scrubber reserve ${scrubber?.reserveCredits ?? 0} CR @ ${receipt.gridPricePerKwh} CR/kWh`}</span>
           <span>{`Peak wear ${peakWear} bps`}</span>
         </div>
@@ -431,7 +431,7 @@ function receiptRows(receipt: TurnAccountingReceipt, capKwh: number): ReceiptRow
     },
     {
       label: "Corridor flow",
-      value: `${receipt.corridorFlowKwh}/${capKwh} kWh · clamp ${receipt.corridorClampedKwh}`,
+      value: `${receipt.corridorFlowKwh}/${capKwh} kWh · attempted clamp ${receipt.corridorClampedKwh}`,
       alert: receipt.corridorClampedKwh > 0,
     },
     { label: "Curtailed", value: `${receipt.curtailedKwh} kWh`, alert: false },
