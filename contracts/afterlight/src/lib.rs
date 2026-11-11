@@ -1,5 +1,6 @@
 use near_sdk::store::LookupMap;
-use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
+use near_sdk::{env, near, require, AccountId, BorshStorageKey, Gas, NearToken, PanicOnDefault, Promise};
+use near_sdk::json_types::U128;
 use std::collections::BTreeMap;
 
 const INITIAL_TOTAL_STATION_CREDITS: u128 = 10_000;
@@ -372,9 +373,58 @@ pub fn step_pure_turn(state: &mut PureStationState) -> Result<(), &'static str> 
     Ok(())
 }
 
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct NFTContractMetadata {
+    pub spec: String,
+    pub name: String,
+    pub symbol: String,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct TokenMetadata {
+    pub title: String,
+    pub description: String,
+    pub extra: String,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct Token {
+    pub token_id: String,
+    pub owner_id: String,
+    pub metadata: TokenMetadata,
+    pub equipment: EquipmentNft,
+}
+
+fn token_view(eq: EquipmentNft) -> Token {
+    Token {
+        token_id: eq.token_id.clone(),
+        owner_id: eq.owner_id.clone(),
+        metadata: TokenMetadata {
+            title: eq.name.clone(),
+            description: "Afterlight dynamic orbital station equipment".to_string(),
+            extra: serde_json::to_string(&eq).expect("EquipmentSerialization"),
+        },
+        equipment: eq,
+    }
+}
+
+#[near(serializers = [json])]
+#[serde(tag = "kind")]
+pub enum DelegateAction {
+    SetPolicy { grid_price_tier: String, maintenance_reserve_bps: u64 },
+    RouteBattery { token_id: String, target_zone: String },
+    TransferEquipmentNft { receiver_id: AccountId, token_id: String },
+    RepairEquipment { token_id: String },
+    AdvanceTurn,
+}
+
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct AfterlightContract {
+    pub owner_id: AccountId,
     pub equipment_by_token: LookupMap<String, EquipmentNft>,
     pub credits_by_account: LookupMap<AccountId, u128>,
     pub delegate_nonces: LookupMap<AccountId, u64>,
@@ -395,17 +445,12 @@ impl AfterlightContract {
     #[init]
     pub fn new() -> Self {
         let initial = create_initial_pure_state(DEFAULT_CORRIDOR_CAP_KWH);
-        let mut equipment_by_token = LookupMap::new(StorageKey::EquipmentByToken);
-        for (token_id, eq) in initial.equipment {
-            equipment_by_token.insert(token_id, eq);
-        }
+        let owner_id = env::predecessor_account_id();
+        let equipment_by_token = LookupMap::new(StorageKey::EquipmentByToken);
         let mut credits_by_account = LookupMap::new(StorageKey::CreditsByAccount);
-        for (acct, bal) in initial.account_credits {
-            if let Ok(parsed) = acct.parse::<AccountId>() {
-                credits_by_account.insert(parsed, bal);
-            }
-        }
+        credits_by_account.insert(owner_id.clone(), 2_400);
         Self {
+            owner_id,
             equipment_by_token,
             credits_by_account,
             delegate_nonces: LookupMap::new(StorageKey::DelegateNonces),
@@ -437,20 +482,99 @@ impl AfterlightContract {
         self.maintenance_reserve_bps = maintenance_reserve_bps;
     }
 
-    pub fn nft_token(&self, token_id: String) -> Option<EquipmentNft> {
-        self.equipment_by_token.get(&token_id).cloned()
+    pub fn nft_metadata(&self) -> NFTContractMetadata {
+        NFTContractMetadata {
+            spec: "nft-1.0.0".to_string(),
+            name: "Afterlight Equipment".to_string(),
+            symbol: "AFT".to_string(),
+        }
     }
 
-    pub fn nft_tokens_for_owner(&self, account_id: String) -> Vec<EquipmentNft> {
+    #[payable]
+    pub fn nft_mint(&mut self, token_id: String, receiver_id: AccountId) -> Token {
+        require!(env::predecessor_account_id() == self.owner_id, "UnauthorizedMint");
+        require!(self.turn == 0, "MintBeforeFirstTurn");
+        require!(self.equipment_by_token.get(&token_id).is_none(), "TokenAlreadyExists");
+        let mut eq = create_initial_pure_state(self.corridor_cap_kwh)
+            .equipment.remove(&token_id).expect("UnknownEquipmentToken");
+        eq.owner_id = receiver_id.to_string();
+        let before = env::storage_usage();
+        self.equipment_by_token.insert(token_id.clone(), eq.clone());
+        if self.credits_by_account.get(&receiver_id).is_none() {
+            self.credits_by_account.insert(receiver_id, 0);
+        }
+        self.equipment_by_token.flush();
+        self.credits_by_account.flush();
+        let cost = u128::from(env::storage_usage().saturating_sub(before))
+            * env::storage_byte_cost().as_yoctonear();
+        require!(env::attached_deposit().as_yoctonear() >= cost, "InsufficientStorageDeposit");
+        env::log_str(&format!("EVENT_JSON:{}", serde_json::json!({
+            "standard": "nep171", "version": "1.0.0", "event": "nft_mint",
+            "data": [{ "owner_id": eq.owner_id, "token_ids": [token_id] }]
+        })));
+        token_view(eq)
+    }
+
+    pub fn nft_token(&self, token_id: String) -> Option<Token> {
+        self.equipment_by_token.get(&token_id).cloned().map(token_view)
+    }
+
+    pub fn nft_tokens_for_owner(&self, account_id: String, from_index: Option<U128>, limit: Option<u64>) -> Vec<Token> {
         let ids = ["gen-solar-1", "bat-alpha-1", "bat-beta-2", "o2-scrubber-1"];
         ids.iter()
             .filter_map(|id| self.equipment_by_token.get(*id))
             .filter(|eq| eq.owner_id == account_id)
+            .skip(from_index.map(|i| i.0.min(4) as usize).unwrap_or(0))
+            .take(limit.unwrap_or(4).min(4) as usize)
             .cloned()
+            .map(token_view)
             .collect()
     }
 
-    pub fn nft_transfer(&mut self, receiver_id: AccountId, token_id: String) {
+    #[payable]
+    pub fn nft_transfer(&mut self, receiver_id: AccountId, token_id: String, approval_id: Option<u64>, memo: Option<String>) {
+        near_sdk::assert_one_yocto();
+        require!(approval_id.is_none(), "ApprovalsNotSupported");
+        let _ = memo;
+        self.transfer_equipment(receiver_id, token_id);
+    }
+
+    #[payable]
+    pub fn nft_transfer_call(&mut self, receiver_id: AccountId, token_id: String, approval_id: Option<u64>, memo: Option<String>, msg: String) -> Promise {
+        near_sdk::assert_one_yocto();
+        require!(approval_id.is_none(), "ApprovalsNotSupported");
+        let _ = memo;
+        let owner_id = env::predecessor_account_id();
+        self.transfer_equipment(receiver_id.clone(), token_id.clone());
+        Promise::new(receiver_id.clone()).function_call(
+            "nft_on_transfer".to_string(),
+            serde_json::to_vec(&serde_json::json!({ "sender_id": owner_id, "previous_owner_id": owner_id, "token_id": token_id, "msg": msg })).unwrap(),
+            NearToken::from_yoctonear(0), Gas::from_tgas(30),
+        ).then(Promise::new(env::current_account_id()).function_call(
+            "nft_resolve_transfer".to_string(),
+            serde_json::to_vec(&serde_json::json!({ "owner_id": owner_id, "receiver_id": receiver_id, "token_id": token_id })).unwrap(),
+            NearToken::from_yoctonear(0), Gas::from_tgas(15),
+        ))
+    }
+
+    #[private]
+    pub fn nft_resolve_transfer(&mut self, owner_id: AccountId, receiver_id: AccountId, token_id: String) -> bool {
+        let must_return = match env::promise_result_checked(0, 16) {
+            Ok(bytes) => serde_json::from_slice::<bool>(&bytes).unwrap_or(true),
+            Err(_) => true,
+        };
+        if !must_return { return true; }
+        if let Some(mut eq) = self.equipment_by_token.get(&token_id).cloned() {
+            if eq.owner_id == receiver_id.as_str() {
+                eq.owner_id = owner_id.to_string();
+                self.equipment_by_token.insert(token_id, eq);
+                return false;
+            }
+        }
+        true
+    }
+
+    fn transfer_equipment(&mut self, receiver_id: AccountId, token_id: String) {
         require!(
             self.station_status != "BLACKOUT",
             "TerminalBlackoutImmutable"
@@ -581,6 +705,7 @@ impl AfterlightContract {
         nonce: u64,
         max_block_height: u64,
         method_name: String,
+        action: DelegateAction,
     ) {
         require!(
             env::predecessor_account_id() == sender_id,
@@ -603,7 +728,19 @@ impl AfterlightContract {
             ),
             "DisallowedDelegateActionKind"
         );
+        match (method_name.as_str(), action) {
+            ("set_policy", DelegateAction::SetPolicy { grid_price_tier, maintenance_reserve_bps }) => self.set_policy(grid_price_tier, maintenance_reserve_bps),
+            ("route_battery", DelegateAction::RouteBattery { token_id, target_zone }) => self.route_battery(token_id, target_zone),
+            ("nft_transfer", DelegateAction::TransferEquipmentNft { receiver_id, token_id }) => self.transfer_equipment(receiver_id, token_id),
+            ("repair_equipment", DelegateAction::RepairEquipment { token_id }) => self.repair_equipment(token_id),
+            ("advance_turn", DelegateAction::AdvanceTurn) => self.advance_turn(),
+            _ => env::panic_str("DisallowedDelegateActionKind"),
+        }
         self.delegate_nonces.insert(sender_id, nonce);
+    }
+
+    pub fn get_station(&self) -> serde_json::Value {
+        serde_json::json!({ "turn": self.turn, "status": self.station_status, "o2Level": self.o2_level })
     }
 
     pub fn ft_total_supply(&self) -> u128 {
@@ -619,6 +756,97 @@ impl AfterlightContract {
 mod tests {
     use super::*;
     use serde::Deserialize;
+
+    fn minted_contract() -> AfterlightContract {
+        use near_sdk::{test_utils::VMContextBuilder, testing_env};
+        let owner: AccountId = "owner.testnet".parse().unwrap();
+        testing_env!(VMContextBuilder::new().current_account_id("contract.testnet".parse().unwrap()).predecessor_account_id(owner.clone()).attached_deposit(NearToken::from_near(1)).build());
+        let mut contract = AfterlightContract::new();
+        for id in ["gen-solar-1", "bat-alpha-1", "bat-beta-2", "o2-scrubber-1"] {
+            contract.nft_mint(id.to_string(), owner.clone());
+        }
+        testing_env!(VMContextBuilder::new().current_account_id("contract.testnet".parse().unwrap()).predecessor_account_id(owner).build());
+        contract
+    }
+
+    #[test]
+    fn metadata_and_minted_dynamic_tokens_are_standard_json() {
+        let contract = minted_contract();
+        assert_eq!(contract.nft_metadata().spec, "nft-1.0.0");
+        let token = contract.nft_token("bat-alpha-1".to_string()).unwrap();
+        let json = serde_json::to_value(&token).unwrap();
+        assert_eq!(json["token_id"], "bat-alpha-1");
+        assert_eq!(json["owner_id"], "owner.testnet");
+        assert_eq!(token.equipment.charge_kwh, 48);
+        assert_eq!(contract.nft_tokens_for_owner("owner.testnet".to_string(), None, Some(2)).len(), 2);
+    }
+
+    #[test]
+    fn delegate_dispatch_changes_routing_and_wear() {
+        let mut contract = minted_contract();
+        let owner: AccountId = "owner.testnet".parse().unwrap();
+        contract.execute_nep366_delegate(owner.clone(), 1, 100, "route_battery".to_string(), DelegateAction::RouteBattery { token_id: "bat-alpha-1".to_string(), target_zone: "SOLAR_ARRAY".to_string() });
+        assert_eq!(contract.nft_token("bat-alpha-1".to_string()).unwrap().equipment.zone, "SOLAR_ARRAY");
+        contract.execute_nep366_delegate(owner.clone(), 2, 100, "advance_turn".to_string(), DelegateAction::AdvanceTurn);
+        assert_eq!(contract.turn, 1);
+        assert_eq!(contract.nft_token("bat-alpha-1".to_string()).unwrap().equipment.wear_bps, 100);
+        assert_eq!(contract.delegate_nonces.get(&owner), Some(&2));
+    }
+
+    #[test]
+    #[should_panic(expected = "StaleDelegateNonce")]
+    fn delegate_rejects_replay() {
+        let mut contract = minted_contract();
+        let owner: AccountId = "owner.testnet".parse().unwrap();
+        contract.execute_nep366_delegate(owner.clone(), 1, 100, "advance_turn".to_string(), DelegateAction::AdvanceTurn);
+        contract.execute_nep366_delegate(owner, 1, 100, "advance_turn".to_string(), DelegateAction::AdvanceTurn);
+    }
+
+    #[test]
+    #[should_panic(expected = "DisallowedDelegateActionKind")]
+    fn delegate_rejects_method_action_swap() {
+        let mut contract = minted_contract();
+        contract.execute_nep366_delegate("owner.testnet".parse().unwrap(), 1, 100, "repair_equipment".to_string(), DelegateAction::AdvanceTurn);
+    }
+
+    #[test]
+    fn standard_transfer_preserves_dynamic_properties() {
+        use near_sdk::{test_utils::VMContextBuilder, testing_env};
+        let mut contract = minted_contract();
+        contract.advance_turn();
+        let before = contract.nft_token("bat-alpha-1".to_string()).unwrap().equipment;
+        testing_env!(VMContextBuilder::new().predecessor_account_id("owner.testnet".parse().unwrap()).attached_deposit(NearToken::from_yoctonear(1)).build());
+        contract.nft_transfer("receiver.testnet".parse().unwrap(), "bat-alpha-1".to_string(), None, None);
+        let after = contract.nft_token("bat-alpha-1".to_string()).unwrap().equipment;
+        assert_eq!(after.owner_id, "receiver.testnet");
+        assert_eq!(before.wear_bps, after.wear_bps);
+        assert_eq!(before.reserve_credits, after.reserve_credits);
+        assert_eq!(before.charge_kwh, after.charge_kwh);
+    }
+
+    #[test]
+    fn rejected_transfer_call_returns_token_without_washing_wear() {
+        use near_sdk::{test_utils::VMContextBuilder, testing_env, PromiseResult};
+        let mut contract = minted_contract();
+        contract.advance_turn();
+        let before = contract.nft_token("bat-alpha-1".to_string()).unwrap().equipment;
+        let owner: AccountId = "owner.testnet".parse().unwrap();
+        let receiver: AccountId = "receiver.testnet".parse().unwrap();
+        let current: AccountId = "contract.testnet".parse().unwrap();
+        testing_env!(VMContextBuilder::new().current_account_id(current.clone()).predecessor_account_id(owner.clone()).attached_deposit(NearToken::from_yoctonear(1)).build());
+        let _promise = contract.nft_transfer_call(receiver.clone(), "bat-alpha-1".to_string(), None, None, "reject".to_string());
+        assert_eq!(contract.nft_token("bat-alpha-1".to_string()).unwrap().owner_id, receiver.as_str());
+        testing_env!(
+            VMContextBuilder::new().current_account_id(current.clone()).predecessor_account_id(current).build(),
+            near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(),
+            std::collections::HashMap::default(), vec![PromiseResult::Successful(b"true".to_vec())]
+        );
+        assert!(!contract.nft_resolve_transfer(owner.clone(), receiver, "bat-alpha-1".to_string()));
+        let after = contract.nft_token("bat-alpha-1".to_string()).unwrap().equipment;
+        assert_eq!(after.owner_id, owner.as_str());
+        assert_eq!(after.wear_bps, before.wear_bps);
+        assert_eq!(after.reserve_credits, before.reserve_credits);
+    }
 
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]

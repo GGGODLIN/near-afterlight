@@ -1,3 +1,4 @@
+import { readTestnetState, type TestnetReport, type RpcFetch } from "../near/testnet-state.ts";
 import fs from "node:fs";
 import path from "node:path";
 import fc from "fast-check";
@@ -20,7 +21,8 @@ import {
   type AfterlightStepOracleVerdict,
 } from "../engine/afterlight-oracle.ts";
 import {
-  buildDeterministicDelegateSignature,
+  createDelegateSessionKey,
+  signDelegateEnvelope,
   verifyAndExecuteNep366Delegate,
 } from "../engine/nep366-session-guard.ts";
 import {
@@ -44,6 +46,7 @@ export interface JudgeVerificationReport {
   tracks: readonly ["games", "nfts"];
   verdict: "PASS" | "FAIL";
   elapsedMs: number;
+  testnet?: TestnetReport;
   rustContractCheck: {
     contractPath: string;
     cargoTomlPinsExact529: boolean;
@@ -102,6 +105,8 @@ interface JudgeAuditOptions {
 const REQUIRED_RUST_TOKENS = [
   "#[near(contract_state)]",
   "pub struct AfterlightContract",
+  "pub fn nft_metadata",
+  "pub fn nft_mint",
   "pub fn nft_token",
   "pub fn nft_tokens_for_owner",
   "pub fn nft_transfer",
@@ -110,6 +115,17 @@ const REQUIRED_RUST_TOKENS = [
   "pub fn advance_turn",
   "pub fn execute_nep366_delegate",
 ] as const;
+
+export async function runLiveJudgeAudit(fetcher: RpcFetch = fetch): Promise<JudgeVerificationReport> {
+  const start = Date.now();
+  const local = runJudgeAudit();
+  const testnet = await readTestnetState(fetcher);
+  return {
+    ...local, testnet,
+    verdict: local.verdict === "PASS" && testnet.passed ? "PASS" : "FAIL",
+    elapsedMs: Date.now() - start,
+  };
+}
 
 export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationReport {
   const startMs = Date.now();
@@ -139,8 +155,9 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
     noDeprecatedStandardsCrate = !cargoSrc.includes("near-contract-standards");
   }
 
-  if (fs.existsSync(contractPath)) {
-    const contractSrc = fs.readFileSync(contractPath, "utf8");
+  // next.config.ts explicitly includes the contract; test-only path overrides must not trace the whole repository.
+  if (fs.existsSync(/* turbopackIgnore: true */ contractPath)) {
+    const contractSrc = fs.readFileSync(/* turbopackIgnore: true */ contractPath, "utf8");
     for (const tok of REQUIRED_RUST_TOKENS) {
       if (contractSrc.includes(tok)) {
         requiredTokensFound.push(tok);
@@ -455,128 +472,33 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
 
   const pbtPassed = !details.failed && witnessFloorsPassed;
 
-  // 3. NEP-366 Gasless Relay 4-Case Verification
   const relayBaseState = createInitialStationState();
-  const relayerId = "relayer.afterlight.testnet";
-  const rValid = verifyAndExecuteNep366Delegate(
-    {
-      senderId: DEFAULT_OPERATOR_A,
-      relayerSignerId: relayerId,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "route_battery",
-      nonce: 11,
-      lastNonce: 10,
-      maxBlockHeight: 9000,
-      currentBlockHeight: 8900,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        DEFAULT_OPERATOR_A,
-        COORDINATOR_CONTRACT_ID,
-        "route_battery",
-        11,
-        9000,
-      ),
-    },
-    {
-      kind: "RouteBattery",
-      actorId: DEFAULT_OPERATOR_A,
-      tokenId: "bat-alpha-1",
-      targetZone: "HABITAT_DOME",
-    },
-    relayBaseState,
-  );
-
-  const rExpired = verifyAndExecuteNep366Delegate(
-    {
-      senderId: DEFAULT_OPERATOR_A,
-      relayerSignerId: relayerId,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "route_battery",
-      nonce: 11,
-      lastNonce: 10,
-      maxBlockHeight: 8800,
-      currentBlockHeight: 8900,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        DEFAULT_OPERATOR_A,
-        COORDINATOR_CONTRACT_ID,
-        "route_battery",
-        11,
-        8800,
-      ),
-    },
-    {
-      kind: "RouteBattery",
-      actorId: DEFAULT_OPERATOR_A,
-      tokenId: "bat-alpha-1",
-      targetZone: "HABITAT_DOME",
-    },
-    relayBaseState,
-  );
-
-  const rNonce = verifyAndExecuteNep366Delegate(
-    {
-      senderId: DEFAULT_OPERATOR_A,
-      relayerSignerId: relayerId,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "route_battery",
-      nonce: 10,
-      lastNonce: 10,
-      maxBlockHeight: 9000,
-      currentBlockHeight: 8900,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        DEFAULT_OPERATOR_A,
-        COORDINATOR_CONTRACT_ID,
-        "route_battery",
-        10,
-        9000,
-      ),
-    },
-    {
-      kind: "RouteBattery",
-      actorId: DEFAULT_OPERATOR_A,
-      tokenId: "bat-alpha-1",
-      targetZone: "HABITAT_DOME",
-    },
-    relayBaseState,
-  );
-
-  const rHijack = verifyAndExecuteNep366Delegate(
-    {
-      senderId: relayerId,
-      relayerSignerId: relayerId,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "nft_transfer",
-      nonce: 21,
-      lastNonce: 20,
-      maxBlockHeight: 9000,
-      currentBlockHeight: 8900,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        relayerId,
-        COORDINATOR_CONTRACT_ID,
-        "nft_transfer",
-        21,
-        9000,
-      ),
-    },
-    {
-      kind: "TransferEquipmentNft",
-      actorId: DEFAULT_OPERATOR_A,
-      tokenId: "bat-alpha-1",
-      toOwnerId: relayerId,
-    },
-    relayBaseState,
-  );
-
+  const key = createDelegateSessionKey();
+  const relayAction: StationAction = {
+    kind: "RouteBattery", actorId: DEFAULT_OPERATOR_A,
+    tokenId: "bat-alpha-1", targetZone: "HABITAT_DOME",
+  };
+  const signed = signDelegateEnvelope({
+    senderId: DEFAULT_OPERATOR_A, relayerSignerId: "relayer.afterlight.testnet",
+    receiverId: COORDINATOR_CONTRACT_ID, methodName: "route_battery",
+    nonce: 11, lastNonce: 10, maxBlockHeight: 9000,
+    currentBlockHeight: 8900, attachedDepositYocto: 0,
+  }, relayAction, key);
+  const checkRelay = (env: typeof signed, action = relayAction) =>
+    verifyAndExecuteNep366Delegate(env, action, relayBaseState, key.publicKeyHex);
+  const rValid = checkRelay(signed);
+  const rExpired = checkRelay({ ...signed, currentBlockHeight: 9001 });
+  const rNonce = checkRelay({ ...signed, lastNonce: 11 });
+  const rPayload = checkRelay(signed, { ...relayAction, targetZone: "SOLAR_ARRAY" });
+  const rSignature = checkRelay({ ...signed, signatureHex: "00".repeat(64) });
+  const attackerKey = createDelegateSessionKey();
+  const forged = signDelegateEnvelope(signed, relayAction, attackerKey);
+  const rKeySwap = checkRelay(forged);
   const nep366Passed =
-    rValid.envelopeVerdict === "Valid" &&
-    rValid.executionVerdict.engineAccepted &&
+    rValid.envelopeAccepted && rValid.executionVerdict.engineAccepted &&
     rExpired.envelopeVerdict === "ExpiredMaxBlockHeight" &&
     rNonce.envelopeVerdict === "StaleDelegateNonce" &&
-    rHijack.envelopeVerdict === "Valid" &&
-    rHijack.executionVerdict.engineRejectionCode === "UnauthorizedNftTransfer";
+    [rPayload, rSignature, rKeySwap].every(r => r.envelopeVerdict === "InvalidDelegateSignature");
 
   // 4. 7-Day (14-Turn) Trajectory Presets Comparison
   const greedy = runTrajectoryPreset("01-greedy-surge-collapse");
@@ -657,7 +579,7 @@ export function runJudgeAudit(options?: JudgeAuditOptions): JudgeVerificationRep
       passed: pbtPassed,
     },
     nep366RelaySuite: {
-      casesVerified: 4,
+      casesVerified: 6,
       passed: nep366Passed,
     },
     trajectoryComparison: {

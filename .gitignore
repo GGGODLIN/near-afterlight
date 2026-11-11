@@ -13,6 +13,6 @@ AGENTS.md
 /CLAUDE.md
 .worktrees/
 .claude/
-.scratch/afterlight/dispatch/
+.scratch/
 contracts/afterlight/target/
 .DS_Store

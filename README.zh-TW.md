@@ -40,12 +40,12 @@ https://github.com/user-attachments/assets/17458f9b-6380-4bfa-a8e4-e19b7a73ef0a
 ## Afterlight 如何使用 4 項原生 NEAR 原語
 
 1. **`NEP-171` 動態磨損設備 NFT（`contracts/afterlight/src/lib.rs`, `near-sdk = "=5.29.0"`）**：
-   - 每台設備（`gen-solar-1`、`bat-alpha-1`、`bat-beta-2`、`o2-scrubber-1`）都是一張動態 `NEP-171` NFT，儲存即時鏈上狀態：`ownerId`、`zone`、`chargeKwh`、`maxCapacityKwh`、`wearBps`、`reserveCredits`、`cumulativeEarnedCredits` 與 `transferCount`（鏈上 `handover_history`）。
+   - 四張設備 NFT 已在 NEAR Testnet 部署、鑄造。`nft_metadata` 回傳 NEP-177 合約資料；`nft_token` 與可分頁的 `nft_tokens_for_owner` 回傳標準 `token_id`、`owner_id`、`metadata`，動態裝備屬性放在 `equipment` 與 `metadata.extra`。指揮艙分開顯示 RPC 最終確認狀態與訪客本地回合，所有權交接紀錄使用 `handoverHistory`。
    - 轉手設備（`nft_transfer`）會把未來電費分潤與鎖定在設備內的 `reserveCredits` 交接給新營運商，並嚴格保留 `wearBps`、`chargeKwh` 與 `zone`（`P3` 轉手不洗白與反女巫拆分不變性）。
-2. **`NEP-141` 相容閉環太空站點數帳本（Closed-Loop Station Credits）**：
+2. **閉環太空站點數帳本（參考 `NEP-141` 帳務概念，並非可轉帳 FT）**:
    - 全站 `10,000 CR` 點數在 `operatorA`、`operatorB`、`colonistDemandPool`、`stationTreasury` 與各設備 `reserveCredits` 之間嚴格閉環守恆（`P1` 貨幣守恆）。
 3. **`NEP-366` 雙層免錢包彈窗委託簽章守衛（`src/engine/nep366-session-guard.ts`）**：
-   - 玩家透過臨時會話金鑰簽署 `NEP-366` `SignedDelegate` 信封即可 **0 錢包彈窗**操作電網，守衛分離 `envelopeVerdict`（驗簽、`attachedDepositYocto === 0`、方法與動作綁定、單調 `nonce`、區塊高度期限）與 `executionVerdict`（`effectivePredecessorId === senderId`，阻擋中繼者盜轉玩家 NFT）。
+   - 訪客指令使用隨機產生的本地 Ed25519 session 金鑰，驗證器用可信本地公鑰驗證完整動作、發送者、接收者、押金、nonce 與期限。這是本地模擬信封，不是 NEP-366 傳輸格式，也不授權真實 NEAR 帳號。部署腳本另外簽署原生 NEP-366 `SignedDelegate`，交給獨立中繼帳號廣播；NEAR 驗證帳號存取金鑰後，合約才分派動作。
 4. **跨語言整數基點（`bps: 0..10_000`）黃金向量同構驗證**：
    - NEAR Rust 智慧合約（`contracts/afterlight/src/lib.rs`）與 TypeScript 引擎（`src/engine/afterlight-engine.ts`）執行完全相同的 6 步整數基點回合管線，並由 `src/scenarios/golden-turn-vectors.json` 對照驗證。
 
@@ -60,22 +60,51 @@ https://github.com/user-attachments/assets/17458f9b-6380-4bfa-a8e4-e19b7a73ef0a
   npm run verify:judge
   ```
 - **See Y**：
-  - 約 `0.16 秒` 內完成並印出 `"verdict": "PASS"` 與 `"tracks": ["games", "nfts"]` 的 JSON 報告。
-  - 驗證 `contracts/afterlight/src/lib.rs`（`near-sdk = "=5.29.0"`）的 `NEP-171` 動態設備原語與 3 組跨語言 Golden Vectors。
-  - 透過 `fast-check`（`fc.check()`）執行 200 次隨機 14 回合序列驗證 `P1`（封閉貨幣守恆）、`P2`（能量收支守恆）、`P3`（`NEP-171` 轉手不洗白磨損與準備金＋防女巫拆分不變性）、`P4`（輸電走廊容量上限與斷電終態不可逆），並通過全部 5 項可達性見證門檻。
-  - 驗證 `NEP-366` 雙層免彈窗簽章守衛與 3 組 7 日快轉軌跡對照。
+  - 本地測試與 Testnet RPC 驗證都通過才印出 `"verdict": "PASS"`、`"tracks": ["games", "nfts"]`；網路失敗會回 FAIL 與原因。優先使用 [NEAR Testnet RPC](https://rpc.testnet.near.org)，傳輸失敗才改用 [FastNEAR Testnet RPC](https://test.rpc.fastnear.com)，報告會列實際入口。
+  - 本地檢查 Rust 原碼結構與 3 組跨語言黃金向量，並不代表執行了 Rust 測試。真鏈檢查會在同一個最終確認區塊讀 `nft_metadata` 與四張 NFT，核對部署、mint、狀態更新及原生中繼交易結果。
+  - 透過 `fast-check` 執行 200 次隨機 14 回合序列，驗證貨幣守恆、能量平衡、NFT 轉手不洗白、走廊上限與斷電終態，並檢查可達性見證門檻。
+  - 驗證 6 項簽章案例，包含拒絕竄改動作、簽章與替換公鑰，另重播 3 組生存軌跡。
 
 ### 步驟 2：執行完整單元測試與 Rust 合約黃金向量測試
 - **Do X**：
   ```bash
-  npm test
-  RUSTFLAGS="--cfg clippy" cargo test --manifest-path contracts/afterlight/Cargo.toml
+  node --experimental-strip-types --test --test-concurrency=3 tests/*.test.ts
+  PATH="$HOME/.cargo/bin:$PATH" CARGO_BUILD_JOBS=3 cargo test --manifest-path contracts/afterlight/Cargo.toml
   ```
 - **See Y**：
-  - 14 項 TypeScript 測試與 Rust 合約單元測試全數通過（0 失敗）。
+  - 2026-11-11 依上述命令通過 17 項 Node 與 8 項 Rust 測試，包含 metadata、mint、動作分派、重播拒絕與轉手屬性保留。API 測試會讀真實 Testnet RPC；另有模擬 RPC 測試確認錯誤處理。
 
 ### 步驟 3：啟動互動式太空站橫切面戰術指揮艙
 - **Do X**：
   執行 `npm run dev` 並開啟 `http://localhost:3000`。
 - **See Y**：
   - 調整 3 項戰術控制（**Grid Price Tier**、**Maintenance Reserve**、**Battery Zone Routing**），點擊 **7-Day Fast-Forward** 播放 3 組 14 回合劇本，實測一鍵 **`Handover NFT to Operator B`** 與 **`Simulate Exploit: Wash Wear / Unauthorized Siphon`**，並展開底部 **Judge & On-Chain Inspector** 抽屜執行 **`Run Judge Verification`**。
+
+
+## Testnet 部署與交易證據
+
+訪客回合維持本地模擬。點 Run Judge Verification 才會讀取最終確認的 Testnet NFT 狀態與收據。以下示範於 2026-11-11 真實部署、鑄造並更新。
+
+[Afterlight Testnet contract](https://testnet.nearblocks.io/address/afterlight-v1-mwby3nj0.testnet)
+
+| 交易 | 瀏覽器收據 |
+|---|---|
+| deploy | [GYVTuUtmJnC9pB79tjiKGZVFRKMvqMaQcyXntZVybUUx](https://testnet.nearblocks.io/txns/GYVTuUtmJnC9pB79tjiKGZVFRKMvqMaQcyXntZVybUUx) |
+| initialize | [5BmgHMTkxrSrD2G2S6dr1imYW7Y8p4T5CNTfZeQqL97U](https://testnet.nearblocks.io/txns/5BmgHMTkxrSrD2G2S6dr1imYW7Y8p4T5CNTfZeQqL97U) |
+| mint-gen-solar-1 | [6MjMeAwhKF1o9wRUPkDara7VVpEWL4ZDna7Wm95fosuo](https://testnet.nearblocks.io/txns/6MjMeAwhKF1o9wRUPkDara7VVpEWL4ZDna7Wm95fosuo) |
+| mint-bat-alpha-1 | [HuYC9HgeyJUsey4kPDnpPEBHUsPuUGZ71Qj9SEoJH5eP](https://testnet.nearblocks.io/txns/HuYC9HgeyJUsey4kPDnpPEBHUsPuUGZ71Qj9SEoJH5eP) |
+| mint-bat-beta-2 | [BStaVR86U7WpdoEvNETnLo83M5fVufuQACQJGyVg9v8a](https://testnet.nearblocks.io/txns/BStaVR86U7WpdoEvNETnLo83M5fVufuQACQJGyVg9v8a) |
+| mint-o2-scrubber-1 | [EJHyBwGqWpnz94aQNFE4z9Xuv6KoZV4ENBxhaSyi6y9c](https://testnet.nearblocks.io/txns/EJHyBwGqWpnz94aQNFE4z9Xuv6KoZV4ENBxhaSyi6y9c) |
+| delegate-route | [8n5xou9v9tBdGrwSxqfVdWfS5ArLSUNHAZGpYrWuqFX1](https://testnet.nearblocks.io/txns/8n5xou9v9tBdGrwSxqfVdWfS5ArLSUNHAZGpYrWuqFX1) |
+| delegate-advance | [BLqkt6q4vx9kTCG4nfVM9zg276Puhux3SPTaxNiS8mLx](https://testnet.nearblocks.io/txns/BLqkt6q4vx9kTCG4nfVM9zg276Puhux3SPTaxNiS8mLx) |
+| redeploy | [67NMsc33qXGuLoVUugEvx5qE1JpF7t1tfDcLdrfUuUVR](https://testnet.nearblocks.io/txns/67NMsc33qXGuLoVUugEvx5qE1JpF7t1tfDcLdrfUuUVR) |
+| create-relayer | [AaYqaeRMZzkexdDkBGhRzZzR91eXgp6hbcAosfURENwY](https://testnet.nearblocks.io/txns/AaYqaeRMZzkexdDkBGhRzZzR91eXgp6hbcAosfURENwY) |
+| native-nep366-route | [GMdyyfece3qMreHPkFWogrL1Urgz7biCy4bVfBE7wGxk](https://testnet.nearblocks.io/txns/GMdyyfece3qMreHPkFWogrL1Urgz7biCy4bVfBE7wGxk) |
+
+公開交易清單位於 [deployment.json](/src/near/deployment.json)。重建獨立示範時，先用下列命令編譯，再執行 [deploy-testnet.mjs](/scripts/deploy-testnet.mjs)，並將 `AFTERLIGHT_RECEIPT_DIR` 指向 repo 外的本地目錄；私鑰只留在該處，權限為 `0600`，腳本只將公開交易資訊寫入清單。可用 `NEAR_RPC_URL` 指定替代 Testnet RPC。
+
+```bash
+PATH="$HOME/.cargo/bin:$PATH" CARGO_BUILD_JOBS=3 RUSTFLAGS="-C target-feature=-reference-types,-multivalue -C link-arg=-s" cargo build --release --target wasm32-unknown-unknown --manifest-path contracts/afterlight/Cargo.toml
+```
+
+此 Testnet 示範保留升級金鑰，提供 NEP-171 核心、metadata 與擁有者專用 mint，不含授權管理或正式錢包整合。

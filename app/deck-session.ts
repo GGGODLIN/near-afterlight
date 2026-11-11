@@ -11,7 +11,9 @@ import {
 import { evaluateAfterlightOracleStep } from "../src/engine/afterlight-oracle.ts";
 import { COORDINATOR_CONTRACT_ID, type AllowedDelegateMethod } from "../src/engine/constants.ts";
 import {
-  buildDeterministicDelegateSignature,
+  createDelegateSessionKey,
+  signDelegateEnvelope,
+  type DelegateSessionKey,
   verifyAndExecuteNep366Delegate,
   type Nep366DelegateEnvelope,
   type Nep366EnvelopeRejection,
@@ -161,31 +163,34 @@ export function createDeck(): DeckState {
   };
 }
 
+const SESSION_KEYS = new Map<string, DelegateSessionKey>();
+
+function sessionKey(senderId: string): DelegateSessionKey {
+  let key = SESSION_KEYS.get(senderId);
+  if (!key) {
+    key = createDelegateSessionKey();
+    SESSION_KEYS.set(senderId, key);
+  }
+  return key;
+}
+
 function signEnvelope(
-  senderId: string,
+  action: StationAction,
   methodName: AllowedDelegateMethod,
   nonce: number,
   blockHeight: number,
 ): Nep366DelegateEnvelope {
-  const maxBlockHeight = blockHeight + SESSION_BLOCK_WINDOW;
-  return {
-    senderId,
+  return signDelegateEnvelope({
+    senderId: action.actorId,
     relayerSignerId: SESSION_RELAYER_ID,
     receiverId: COORDINATOR_CONTRACT_ID,
     methodName,
     nonce,
     lastNonce: nonce - 1,
-    maxBlockHeight,
+    maxBlockHeight: blockHeight + SESSION_BLOCK_WINDOW,
     currentBlockHeight: blockHeight,
     attachedDepositYocto: 0,
-    signatureHex: buildDeterministicDelegateSignature(
-      senderId,
-      COORDINATOR_CONTRACT_ID,
-      methodName,
-      nonce,
-      maxBlockHeight,
-    ),
-  };
+  }, action, sessionKey(action.actorId));
 }
 
 interface SessionRelay {
@@ -202,7 +207,7 @@ function relayThroughSession(
   action: StationAction,
   meta: { id: number; label: string },
 ): SessionRelay {
-  const trace = verifyAndExecuteNep366Delegate(envelope, action, state);
+  const trace = verifyAndExecuteNep366Delegate(envelope, action, state, sessionKey(envelope.senderId).publicKeyHex);
   const executedAction: StationAction = {
     ...action,
     actorId: trace.executionVerdict.effectivePredecessorId,
@@ -252,7 +257,7 @@ function relayCommand(
   const blockHeight = deck.live.blockHeight + 1;
   const relay = relayThroughSession(
     deck.live.state,
-    signEnvelope(action.actorId, methodName, nonce, blockHeight),
+    signEnvelope(action, methodName, nonce, blockHeight),
     action,
     { id: deck.relaySeq + 1, label },
   );
@@ -335,14 +340,14 @@ export function runExploitProbes(deck: DeckState, state: StationState, tokenId: 
   const blockHeight = deck.live.blockHeight + 1;
   const wash = relayThroughSession(
     state,
-    signEnvelope(target.ownerId, "nft_transfer", 1, blockHeight),
+    signEnvelope({ kind: "TransferEquipmentNft", actorId: target.ownerId, tokenId, toOwnerId: WASH_SYBIL_ID }, "nft_transfer", 1, blockHeight),
     { kind: "TransferEquipmentNft", actorId: target.ownerId, tokenId, toOwnerId: WASH_SYBIL_ID },
     { id: deck.relaySeq + 1, label: `Wash-wear probe · ${tokenId} → sybil` },
   );
   const siphon = relayThroughSession(
     state,
-    signEnvelope(SESSION_RELAYER_ID, "nft_transfer", 1, blockHeight),
-    { kind: "TransferEquipmentNft", actorId: target.ownerId, tokenId, toOwnerId: SESSION_RELAYER_ID },
+    signEnvelope({ kind: "TransferEquipmentNft", actorId: SESSION_RELAYER_ID, tokenId, toOwnerId: SESSION_RELAYER_ID }, "nft_transfer", 1, blockHeight),
+    { kind: "TransferEquipmentNft", actorId: SESSION_RELAYER_ID, tokenId, toOwnerId: SESSION_RELAYER_ID },
     { id: deck.relaySeq + 2, label: `Siphon probe · relayer → ${tokenId}` },
   );
   return {

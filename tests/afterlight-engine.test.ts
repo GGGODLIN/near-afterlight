@@ -18,7 +18,8 @@ import {
 } from "../src/engine/afterlight-engine.ts";
 import { evaluateAfterlightOracleStep } from "../src/engine/afterlight-oracle.ts";
 import {
-  buildDeterministicDelegateSignature,
+  createDelegateSessionKey,
+  signDelegateEnvelope,
   verifyAndExecuteNep366Delegate,
 } from "../src/engine/nep366-session-guard.ts";
 
@@ -238,158 +239,32 @@ test("Role 1 (Ticket 01.4 & P3): NEP-171 dynamic equipment transfer preserves we
   );
 });
 
-test("Role 1 (Ticket 01.5): Two-layer NEP-366 SignedDelegate session guard separates envelope vs execution verdicts", () => {
+test("Ed25519 session guard accepts signed action and rejects payload, signature, key and nonce tampering", () => {
   const state = createInitialStationState();
-  const validAction: StationAction = {
-    kind: "RouteBattery",
-    actorId: OPERATOR_A,
-    tokenId: "bat-alpha-1",
-    targetZone: "HABITAT_DOME",
+  const key = createDelegateSessionKey();
+  const action: StationAction = {
+    kind: "RouteBattery", actorId: OPERATOR_A,
+    tokenId: "bat-alpha-1", targetZone: "HABITAT_DOME",
   };
-
-  // Case 1: Valid gasless NEP-366 envelope
-  const validSig = buildDeterministicDelegateSignature(
-    OPERATOR_A,
-    COORDINATOR_CONTRACT_ID,
-    "route_battery",
-    101,
-    5000,
-  );
-  const resValid = verifyAndExecuteNep366Delegate(
-    {
-      senderId: OPERATOR_A,
-      relayerSignerId: RELAYER_ID,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "route_battery",
-      nonce: 101,
-      lastNonce: 100,
-      maxBlockHeight: 5000,
-      currentBlockHeight: 4950,
-      attachedDepositYocto: 0,
-      signatureHex: validSig,
-    },
-    validAction,
-    state,
-  );
-  assert.equal(resValid.envelopeVerdict, "Valid");
-  assert.equal(resValid.envelopeAccepted, true);
-  assert.equal(resValid.executionVerdict.effectivePredecessorId, OPERATOR_A);
-  assert.equal(resValid.executionVerdict.engineAccepted, true);
-
-  // Case 2: Expired maxBlockHeight rejected at envelope layer
-  const resExpired = verifyAndExecuteNep366Delegate(
-    {
-      senderId: OPERATOR_A,
-      relayerSignerId: RELAYER_ID,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "route_battery",
-      nonce: 101,
-      lastNonce: 100,
-      maxBlockHeight: 4900,
-      currentBlockHeight: 4950,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        OPERATOR_A,
-        COORDINATOR_CONTRACT_ID,
-        "route_battery",
-        101,
-        4900,
-      ),
-    },
-    validAction,
-    state,
-  );
-  assert.equal(resExpired.envelopeVerdict, "ExpiredMaxBlockHeight");
-  assert.equal(resExpired.envelopeAccepted, false);
-
-  // Case 3: Stale nonce replay rejected at envelope layer
-  const resStaleNonce = verifyAndExecuteNep366Delegate(
-    {
-      senderId: OPERATOR_A,
-      relayerSignerId: RELAYER_ID,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "route_battery",
-      nonce: 100,
-      lastNonce: 100,
-      maxBlockHeight: 5000,
-      currentBlockHeight: 4950,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        OPERATOR_A,
-        COORDINATOR_CONTRACT_ID,
-        "route_battery",
-        100,
-        5000,
-      ),
-    },
-    validAction,
-    state,
-  );
-  assert.equal(resStaleNonce.envelopeVerdict, "StaleDelegateNonce");
-  assert.equal(resStaleNonce.envelopeAccepted, false);
-
-  // Case 4: Relayer attempts to hijack Operator A's NFT using relayer's own senderId -> envelope valid, engine rejects with UnauthorizedNftTransfer
-  const hijackAction: StationAction = {
-    kind: "TransferEquipmentNft",
-    actorId: OPERATOR_A, // forged inside payload, but NEP-366 binds effectivePredecessorId to envelope.senderId (RELAYER_ID)
-    tokenId: "bat-alpha-1",
-    toOwnerId: RELAYER_ID,
-  };
-  const resHijack = verifyAndExecuteNep366Delegate(
-    {
-      senderId: RELAYER_ID,
-      relayerSignerId: RELAYER_ID,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "nft_transfer",
-      nonce: 201,
-      lastNonce: 200,
-      maxBlockHeight: 5000,
-      currentBlockHeight: 4950,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        RELAYER_ID,
-        COORDINATOR_CONTRACT_ID,
-        "nft_transfer",
-        201,
-        5000,
-      ),
-    },
-    hijackAction,
-    state,
-  );
-  assert.equal(resHijack.envelopeVerdict, "Valid");
-  assert.equal(resHijack.executionVerdict.effectivePredecessorId, RELAYER_ID);
-  assert.equal(resHijack.executionVerdict.engineAccepted, false);
-  assert.equal(
-    resHijack.executionVerdict.engineRejectionCode,
-    "UnauthorizedNftTransfer",
-  );
-
-  // Relayer cannot swap action.kind (e.g. route_battery envelope paired with TransferEquipmentNft)
-  const resMethodSwap = verifyAndExecuteNep366Delegate(
-    {
-      senderId: OPERATOR_A,
-      relayerSignerId: RELAYER_ID,
-      receiverId: COORDINATOR_CONTRACT_ID,
-      methodName: "route_battery",
-      nonce: 301,
-      lastNonce: 300,
-      maxBlockHeight: 5000,
-      currentBlockHeight: 4950,
-      attachedDepositYocto: 0,
-      signatureHex: buildDeterministicDelegateSignature(
-        OPERATOR_A,
-        COORDINATOR_CONTRACT_ID,
-        "route_battery",
-        301,
-        5000,
-      ),
-    },
-    hijackAction,
-    state,
-  );
-  assert.equal(resMethodSwap.envelopeAccepted, false);
-  assert.equal(resMethodSwap.envelopeVerdict, "DisallowedDelegateActionKind");
+  const signed = signDelegateEnvelope({
+    senderId: OPERATOR_A, relayerSignerId: RELAYER_ID,
+    receiverId: COORDINATOR_CONTRACT_ID, methodName: "route_battery",
+    nonce: 101, lastNonce: 100, maxBlockHeight: 5000,
+    currentBlockHeight: 4950, attachedDepositYocto: 0,
+  }, action, key);
+  const verify = (envelope = signed, candidate: StationAction = action) =>
+    verifyAndExecuteNep366Delegate(envelope, candidate, state, key.publicKeyHex);
+  assert.equal(verify().executionVerdict.engineAccepted, true);
+  assert.equal(verify(signed, { ...action, targetZone: "SOLAR_ARRAY" }).envelopeVerdict, "InvalidDelegateSignature");
+  assert.equal(verify({ ...signed, signatureHex: "00".repeat(64) }).envelopeVerdict, "InvalidDelegateSignature");
+  assert.equal(verify({ ...signed, signatureHex: "invalid" }).envelopeVerdict, "InvalidDelegateSignature");
+  assert.equal(verify(signDelegateEnvelope(signed, action, createDelegateSessionKey())).envelopeVerdict, "InvalidDelegateSignature");
+  assert.equal(verify({ ...signed, nonce: 102 }).envelopeVerdict, "InvalidDelegateSignature");
+  assert.equal(verify({ ...signed, lastNonce: 101 }).envelopeVerdict, "StaleDelegateNonce");
+  assert.equal(verify({ ...signed, currentBlockHeight: 5001 }).envelopeVerdict, "ExpiredMaxBlockHeight");
+  const hijack: StationAction = { kind: "TransferEquipmentNft", actorId: RELAYER_ID, tokenId: "bat-alpha-1", toOwnerId: RELAYER_ID };
+  const envelope = signDelegateEnvelope({ ...signed, senderId: RELAYER_ID, methodName: "nft_transfer" }, hijack, key);
+  assert.equal(verify(envelope, hijack).executionVerdict.engineRejectionCode, "UnauthorizedNftTransfer");
   assert.equal(state.equipment["bat-alpha-1"].ownerId, OPERATOR_A);
 });
 

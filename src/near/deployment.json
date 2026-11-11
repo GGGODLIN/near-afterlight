@@ -1,0 +1,62 @@
+{
+  "network": "testnet",
+  "rpcUrl": "https://rpc.testnet.near.org",
+  "contractId": "afterlight-v1-mwby3nj0.testnet",
+  "transactions": [
+    {
+      "label": "deploy",
+      "hash": "GYVTuUtmJnC9pB79tjiKGZVFRKMvqMaQcyXntZVybUUx",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "initialize",
+      "hash": "5BmgHMTkxrSrD2G2S6dr1imYW7Y8p4T5CNTfZeQqL97U",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "mint-gen-solar-1",
+      "hash": "6MjMeAwhKF1o9wRUPkDara7VVpEWL4ZDna7Wm95fosuo",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "mint-bat-alpha-1",
+      "hash": "HuYC9HgeyJUsey4kPDnpPEBHUsPuUGZ71Qj9SEoJH5eP",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "mint-bat-beta-2",
+      "hash": "BStaVR86U7WpdoEvNETnLo83M5fVufuQACQJGyVg9v8a",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "mint-o2-scrubber-1",
+      "hash": "EJHyBwGqWpnz94aQNFE4z9Xuv6KoZV4ENBxhaSyi6y9c",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "delegate-route",
+      "hash": "8n5xou9v9tBdGrwSxqfVdWfS5ArLSUNHAZGpYrWuqFX1",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "delegate-advance",
+      "hash": "BLqkt6q4vx9kTCG4nfVM9zg276Puhux3SPTaxNiS8mLx",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "redeploy",
+      "hash": "67NMsc33qXGuLoVUugEvx5qE1JpF7t1tfDcLdrfUuUVR",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "create-relayer",
+      "hash": "AaYqaeRMZzkexdDkBGhRzZzR91eXgp6hbcAosfURENwY",
+      "signerId": "afterlight-v1-mwby3nj0.testnet"
+    },
+    {
+      "label": "native-nep366-route",
+      "hash": "GMdyyfece3qMreHPkFWogrL1Urgz7biCy4bVfBE7wGxk",
+      "signerId": "relay.afterlight-v1-mwby3nj0.testnet"
+    }
+  ]
+}

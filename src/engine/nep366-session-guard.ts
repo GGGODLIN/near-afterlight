@@ -1,3 +1,5 @@
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import {
   ALLOWED_DELEGATE_METHODS,
   COORDINATOR_CONTRACT_ID,
@@ -29,6 +31,7 @@ export interface Nep366DelegateEnvelope {
   maxBlockHeight: number;
   currentBlockHeight: number;
   attachedDepositYocto: number;
+  publicKeyHex: string;
   signatureHex: string;
 }
 
@@ -43,14 +46,39 @@ interface Nep366RelayTrace {
   outcome: StationActionOutcome;
 }
 
-export function buildDeterministicDelegateSignature(
-  senderId: string,
-  receiverId: string,
-  methodName: string,
-  nonce: number,
-  maxBlockHeight: number,
-): string {
-  return `ed25519_sig_${senderId}_${receiverId}_${methodName}_${nonce}_${maxBlockHeight}`;
+export interface DelegateSessionKey {
+  privateKey: Uint8Array;
+  publicKeyHex: string;
+}
+
+export function createDelegateSessionKey(): DelegateSessionKey {
+  const privateKey = ed25519.utils.randomSecretKey();
+  return { privateKey, publicKeyHex: bytesToHex(ed25519.getPublicKey(privateKey)) };
+}
+
+type UnsignedEnvelope = Omit<Nep366DelegateEnvelope, "signatureHex" | "publicKeyHex">;
+
+function delegatePayload(envelope: UnsignedEnvelope, action: StationAction): Uint8Array {
+  const orderedAction = Object.fromEntries(
+    Object.entries(action).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return new TextEncoder().encode(JSON.stringify([
+    "afterlight-local-session-v1", envelope.senderId, envelope.receiverId,
+    envelope.methodName, envelope.nonce, envelope.maxBlockHeight,
+    envelope.attachedDepositYocto, orderedAction,
+  ]));
+}
+
+export function signDelegateEnvelope(
+  envelope: UnsignedEnvelope,
+  action: StationAction,
+  key: DelegateSessionKey,
+): Nep366DelegateEnvelope {
+  return {
+    ...envelope,
+    publicKeyHex: key.publicKeyHex,
+    signatureHex: bytesToHex(ed25519.sign(delegatePayload(envelope, action), key.privateKey)),
+  };
 }
 
 const DELEGATE_METHOD_TO_ACTION_KIND: Record<
@@ -68,6 +96,7 @@ export function verifyAndExecuteNep366Delegate(
   envelope: Nep366DelegateEnvelope,
   action: StationAction,
   state: Readonly<StationState>,
+  trustedPublicKeyHex: string,
 ): Nep366RelayTrace {
   const rejectEnvelope = (verdict: Nep366EnvelopeRejection): Nep366RelayTrace => ({
     envelopeVerdict: verdict,
@@ -127,14 +156,17 @@ export function verifyAndExecuteNep366Delegate(
     return rejectEnvelope("StaleDelegateNonce");
   }
 
-  const expectedSignature = buildDeterministicDelegateSignature(
-    envelope.senderId,
-    envelope.receiverId,
-    envelope.methodName,
-    envelope.nonce,
-    envelope.maxBlockHeight,
-  );
-  if (envelope.signatureHex !== expectedSignature) {
+  try {
+    if (
+      envelope.publicKeyHex !== trustedPublicKeyHex ||
+      !ed25519.verify(
+        hexToBytes(envelope.signatureHex), delegatePayload(envelope, action),
+        hexToBytes(trustedPublicKeyHex), { zip215: false },
+      )
+    ) {
+      return rejectEnvelope("InvalidDelegateSignature");
+    }
+  } catch {
     return rejectEnvelope("InvalidDelegateSignature");
   }
 

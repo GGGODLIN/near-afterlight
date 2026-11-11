@@ -802,6 +802,23 @@ function JudgeReportView({ report }: JudgeReportViewProps) {
           <dd>{`${mark(rust.passed)} ${repoRelativePath(rust.contractPath)} · ${rust.requiredTokensFound.length}/${primitiveCount} primitives · near-sdk =5.29.0 pinned ${mark(rust.cargoTomlPinsExact529)} · ${rust.goldenVectorsMatchedCount} golden vectors`}</dd>
         </div>
         <div>
+          <dt>NEP-171 Testnet · live RPC</dt>
+          <dd>
+            {report.testnet ? (
+              <>
+                <p>{`${mark(report.testnet.passed)} ${report.testnet.contractId} · block ${report.testnet.blockHeight ?? "unavailable"} · ${report.testnet.metadata?.name ?? report.testnet.error}`}</p>
+                {report.testnet.tokens.map(token => (
+                  <p key={token.token_id}>{`${token.token_id} · owner ${token.owner_id} · ${token.equipment.zone} · ${token.equipment.chargeKwh} kWh · wear ${token.equipment.wearBps} bps · reserve ${token.equipment.reserveCredits} CR`}</p>
+                ))}
+                {report.testnet.transactions.map(tx => (
+                  <p key={tx.hash}><a href={tx.explorerUrl} target="_blank" rel="noreferrer">{`${mark(tx.succeeded)} ${tx.label} · ${tx.hash}`}</a></p>
+                ))}
+                <p>{report.testnet.error ?? `Read at ${report.testnet.checkedAt}. Refresh verification to read the latest finalized state.`}</p>
+              </>
+            ) : "Live RPC not checked"}
+          </dd>
+        </div>
+        <div>
           <dt>fast-check PBT</dt>
           <dd>{`${mark(pbt.passed)} ${pbt.numRuns} runs · seed ${pbt.seed} · ${pbt.invariantsVerified.join(" ")} · first divergence ${divergence}`}</dd>
         </div>
@@ -907,7 +924,7 @@ function SessionRelayColumn({ relayLog, live }: SessionRelayColumnProps) {
         ))}
       </ol>
       <p className="inspector-note">
-        Envelopes are verified in-browser by src/engine/nep366-session-guard.ts; signatures are deterministic simulation strings and no testnet transaction is broadcast.
+        Guest rounds run locally with real Ed25519 signatures bound to the full action and a trusted local session public key. They do not broadcast transactions or authorize a NEAR account. Run Judge Verification to read the deployed Testnet NFTs and transaction receipts through NEAR RPC.
       </p>
     </div>
   );
@@ -920,7 +937,7 @@ interface TokenStateColumnProps {
 function TokenStateColumn({ state }: TokenStateColumnProps) {
   return (
     <div className="inspector-column">
-      <h3>NEP-171 token state</h3>
+      <h3>Guest simulation · local token state</h3>
       <table className="token-table">
         <thead>
           <tr>
